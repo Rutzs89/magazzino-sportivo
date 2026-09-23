@@ -83,6 +83,8 @@ const ARCHIVIO_VUOTO = JSON.stringify({
 });
 const disco = { dati: ARCHIVIO_VUOTO, file: {} };
 const modulo = { scritto: null, daLeggere: null }; // il modulo di distribuzione
+const fogliScritti = {}; // i quattro fogli scaricati
+let daLeggere = null; // il foglio che la finta finestra "apri" restituisce
 const invoke = async (nome, arg) => {
   switch (nome) {
     case "carica_dati": return disco.dati;
@@ -92,6 +94,8 @@ const invoke = async (nome, arg) => {
     case "scrivi_file": disco.file[arg.percorso] = arg.contenuto; return null;
     case "leggi_file": return disco.file[arg.percorso];
     case "scrivi_excel_fogli": modulo.scritto = arg; return null;
+    case "scrivi_excel": fogliScritti[arg.foglio] = arg; return null;
+    case "leggi_excel": return daLeggere;
     case "leggi_excel_fogli": return modulo.daLeggere;
     default: throw new Error("comando sconosciuto: " + nome);
   }
@@ -299,6 +303,103 @@ const carica = async (tipo, righe) => {
   await w.eval("caricaModulo()");
   await attendi(900);
   ok(Object.keys(w.eval("S.richieste")).length === ricDopoModulo, "ricaricando lo stesso modulo non nasce niente di nuovo");
+
+  /* 10. i quattro fogli: scaricati dal programma e ricaricati tali e quali */
+  const conta = () => ({
+    articoli: w.eval("S.settings.articoli.length"),
+    atlete: Object.keys(w.eval("S.atlete")).length,
+    divise: Object.keys(w.eval("S.divise")).length,
+    materiale: Object.keys(w.eval("S.materiale")).length,
+    richieste: Object.keys(w.eval("S.richieste")).length,
+    squadre: w.eval("S.settings.squadre.length"),
+  });
+  const TIPI = ["articoli", "atlete", "divise", "richieste"];
+  for (const tipo of TIPI) {
+    await w.eval(`scaricaModello('${tipo}')`);
+    await attendi(100);
+  }
+  const fogli = TIPI.map((t) => fogliScritti[w.eval(`MODELLI_EXCEL.${t}.foglio`)]);
+  ok(fogli.every(Boolean), "i quattro fogli si scaricano");
+  ok(
+    fogli.every((f) => f.righe.every((r) => r.length === f.intestazioni.length && r.every((c) => typeof c === "string"))),
+    "in ogni foglio ogni riga ha tante caselle quante colonne, tutte in testo",
+  );
+  const primaGiro = conta();
+  for (const [i, tipo] of TIPI.entries()) {
+    daLeggere = [fogli[i].intestazioni, ...fogli[i].righe];
+    await w.eval(`caricaModello('${tipo}')`);
+    await attendi(600);
+    const probl = w.eval("S.app.problemiExcel") || [];
+    ok(probl.length === 0, `${tipo}: il foglio scaricato si ricarica senza problemi ${probl.slice(0, 2).join("; ")}`);
+  }
+  ok(JSON.stringify(conta()) === JSON.stringify(primaGiro), `ricaricare i quattro fogli non cambia niente ${JSON.stringify(conta())}`);
+  // le colonne in un altro ordine: il programma le riconosce dal titolo
+  for (const [i, tipo] of TIPI.entries()) {
+    const ordine = fogli[i].intestazioni.map((_, k) => k).reverse();
+    daLeggere = [ordine.map((k) => fogli[i].intestazioni[k]), ...fogli[i].righe.map((r) => ordine.map((k) => r[k]))];
+    await w.eval(`caricaModello('${tipo}')`);
+    await attendi(600);
+  }
+  ok(JSON.stringify(conta()) === JSON.stringify(primaGiro), "anche con le colonne in ordine diverso non cambia niente");
+  // un foglio sbagliato (le divise al posto degli atleti) viene rifiutato
+  daLeggere = [fogli[2].intestazioni, ...fogli[2].righe];
+  await w.eval("caricaModello('atlete')");
+  await attendi(400);
+  ok(JSON.stringify(conta()) === JSON.stringify(primaGiro), "il foglio delle divise caricato come atleti viene rifiutato");
+
+  /* 11. dal programma pieno a uno vuoto: stesso archivio */
+  const pieno = { esiti: {}, codici: w.eval("S.settings.articoli.map(a=>a.nome+'='+(a.codice||'')+'|'+(a.stagione||'')).sort().join(',')") };
+  Object.values(w.eval("derive()").prop).forEach((p) => (pieno.esiti[p.esito] = (pieno.esiti[p.esito] || 0) + 1));
+  disco.dati = ARCHIVIO_VUOTO;
+  const dom2 = new JSDOM(fs.readFileSync(PAGINA, "utf8"), {
+    runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/#impostazioni",
+    beforeParse(w2) {
+      w2.__TAURI__ = { core: { invoke }, dialog: { save: async () => "C:\\finto\\f.xlsx", open: async () => "C:\\finto\\f.xlsx" }, process: { exit() {} } };
+      w2.scrollTo = () => {}; w2.confirm = () => true;
+      w2.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+      w2.HTMLDialogElement.prototype.close = function () { this.open = false; };
+    },
+  });
+  const w2 = dom2.window;
+  await attendi(900);
+  for (const [i, tipo] of TIPI.entries()) {
+    daLeggere = [fogli[i].intestazioni, ...fogli[i].righe];
+    await w2.eval(`caricaModello('${tipo}')`);
+    await attendi(900);
+  }
+  const vuotoRiempito = {
+    atlete: Object.keys(w2.eval("S.atlete")).length,
+    divise: Object.keys(w2.eval("S.divise")).length,
+    richieste: Object.keys(w2.eval("S.richieste")).length,
+    articoli: w2.eval("S.settings.articoli.length"),
+    squadre: w2.eval("S.settings.squadre.length"),
+  };
+  ok(vuotoRiempito.atlete === primaGiro.atlete && vuotoRiempito.divise === primaGiro.divise
+    && vuotoRiempito.richieste === primaGiro.richieste && vuotoRiempito.articoli === primaGiro.articoli
+    && vuotoRiempito.squadre === primaGiro.squadre,
+    `un programma vuoto riempito con i quattro fogli ha gli stessi dati ${JSON.stringify(vuotoRiempito)}`);
+  const codici2 = w2.eval("S.settings.articoli.map(a=>a.nome+'='+(a.codice||'')+'|'+(a.stagione||'')).sort().join(',')");
+  ok(codici2 === pieno.codici, "codici e stagioni degli articoli passano con i fogli");
+  const esiti2 = {};
+  Object.values(w2.eval("derive()").prop).forEach((p) => (esiti2[p.esito] = (esiti2[p.esito] || 0) + 1));
+  ok(JSON.stringify(esiti2) === JSON.stringify(pieno.esiti), `e le proposte sono le stesse ${JSON.stringify(esiti2)}`);
+  ok(
+    JSON.stringify(w2.eval("derive().perServire.map(x=>x.nome)")) === JSON.stringify(w.eval("derive().perServire.map(x=>x.nome)")),
+    "e le squadre sono nello stesso ordine di distribuzione",
+  );
+
+  /* 12. le esportazioni CSV: intestazione e righe allineate */
+  for (const kind of ["atlete", "divise", "materiale", "assegnazioni", "movimenti"]) {
+    disco.file = {};
+    await w.eval(`esporta('${kind}')`);
+    await attendi(200);
+    const testo = Object.values(disco.file)[0] || "";
+    const righe = testo.replace(/^\ufeff/, "").split("\r\n").filter(Boolean);
+    const campi = (r) => { let n = 1, dentro = false; for (const c of r) { if (c === '"') dentro = !dentro; else if (c === ";" && !dentro) n++; } return n; };
+    const n0 = righe.length ? campi(righe[0]) : 0;
+    ok(righe.length >= 1 && righe.every((r) => campi(r) === n0),
+      `CSV ${kind}: ${righe.length - 1} righe, tutte con le ${n0} colonne dell'intestazione`);
+  }
 
   ok(errs.length === 0, "nessun errore JavaScript " + errs.join("; "));
   process.exit(falliti ? 1 : 0);
