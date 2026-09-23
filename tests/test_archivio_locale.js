@@ -100,7 +100,7 @@ const dom = new JSDOM(html, {
   beforeParse(w) {
     w.__TAURI__ = { core: { invoke }, dialog, process: { exit() {} } };
     w.scrollTo = () => {};
-    w.confirm = () => true;
+    w.confirm = () => true; w.__rispostaConferme = true;
     w.HTMLDialogElement.prototype.showModal = function () {
       this.open = true;
     };

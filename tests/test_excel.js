@@ -112,7 +112,7 @@ const dom = new JSDOM(fs.readFileSync(PAGINA, "utf8"), {
       process: { exit() {} },
     };
     w.scrollTo = () => {};
-    w.confirm = () => true;
+    w.confirm = () => true; w.__rispostaConferme = true;
     w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
     w.HTMLDialogElement.prototype.close = function () { this.open = false; };
   },
@@ -355,7 +355,7 @@ const carica = async (tipo, righe) => {
     runScripts: "dangerously", pretendToBeVisual: true, url: "https://x.test/#impostazioni",
     beforeParse(w2) {
       w2.__TAURI__ = { core: { invoke }, dialog: { save: async () => "C:\\finto\\f.xlsx", open: async () => "C:\\finto\\f.xlsx" }, process: { exit() {} } };
-      w2.scrollTo = () => {}; w2.confirm = () => true;
+      w2.scrollTo = () => {}; w2.confirm = () => true; w2.__rispostaConferme = true;
       w2.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
       w2.HTMLDialogElement.prototype.close = function () { this.open = false; };
     },

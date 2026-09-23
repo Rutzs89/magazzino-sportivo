@@ -50,6 +50,13 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   const locali=new Set([...corpo.matchAll(/(?:const|let|var)\s+([A-Za-z_]\w*)\s*=/g)].map(m=>m[1]));
   const mancano=[...nomi].filter(n=>!PAROLE.has(n)&&!locali.has(n)&&w.eval(`typeof ${n}`)==='undefined');
   ok(mancano.length===0,`ogni funzione chiamata nel gestore dei pulsanti esiste${mancano.length?': mancano '+mancano.join(', '):` (${nomi.size} nomi)`}`);}
+ // Nel programma installato la conferma di sistema non va (e senza await
+ // passava da sola): ogni domanda passa da chiedi(), sempre con await.
+ {const ad=fs.readFileSync('tools/adattatore_tauri.js','utf8');
+  const nude=[...html.matchAll(/(^|[^\w.])confirm\(/g)].length+[...html.matchAll(/window\.confirm\(/g)].length;
+  const senzaAwait=[...html.matchAll(/(^|[^\w])chiedi\(/g)].filter(m=>!/(await\s*|function\s*)$/.test(html.slice(Math.max(0,m.index-10),m.index+m[1].length)));
+  ok(nude===1&&senzaAwait.length===0&&!/window\.confirm\(AVVISO_CHIUSURA\)\)\)/.test(ad.replace(/window\.chiedi \? window\.chiedi\(AVVISO_CHIUSURA\) : window\.confirm\(AVVISO_CHIUSURA\)/g,'')),
+    `ogni conferma passa da chiedi() e la aspetta (conferme di sistema dirette: ${nude-1}, senza await: ${senzaAwait.length})`);}
  // Il case c'era, ma chiamava una funzione sparita in un rifacimento: il
  // pulsante "Consegna a tutti" e "Scarica lista" non facevano niente. Qui si
  // controlla che ogni funzione chiamata dalle azioni esista davvero.
@@ -271,6 +278,18 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await wait(600);
   D1=w.eval('derive()');
   ok(D1.stock[k].ora===3,'Invio nella finestra del carico registra l\'arrivo, non la correzione');}
+
+ // --- come nel programma installato: la conferma e' asincrona e la risposta e' no ---
+ {const rid=Object.keys(store.richieste)[0];
+  w.confirm=async()=>false;
+  w.location.hash='#assegnazioni';w.eval("S.ui.aTeam='';S.ui.aArt='';S.ui.aEsito='';S.ui.aQ='';changed()");await wait(300);
+  const x=w.document.querySelector(`[data-act="delRichiesta"][data-id="${rid}"]`);
+  if(x)x.click();await wait(300);
+  ok(!!x&&!!store.richieste[rid],'se alla conferma si risponde no (anche in differita), la richiesta non viene eliminata');
+  w.confirm=async()=>true;
+  x&&w.document.querySelector(`[data-act="delRichiesta"][data-id="${rid}"]`).click();await wait(300);
+  ok(!store.richieste[rid],'rispondendo sì viene eliminata');
+  w.confirm=()=>true;}
 
  ok(errs.length===0,'nessun errore JavaScript '+(errs.join('; ')));
  process.exit(fail?1:0)})();

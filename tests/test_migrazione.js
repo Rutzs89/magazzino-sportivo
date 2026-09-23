@@ -84,7 +84,7 @@ function apri() {
         process: { exit() {} },
       };
       w.scrollTo = () => {};
-      w.confirm = () => true;
+      w.confirm = () => true; w.__rispostaConferme = true;
       w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
       w.HTMLDialogElement.prototype.close = function () { this.open = false; };
     },

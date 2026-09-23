@@ -430,7 +430,7 @@
   if (T.window && T.window.getCurrentWindow) {
     T.window.getCurrentWindow().onCloseRequested(async function (e) {
       e.preventDefault();
-      if (!(await chiudiIConti()) && !window.confirm(AVVISO_CHIUSURA)) return;
+      if (!(await chiudiIConti()) && !(await (window.chiedi ? window.chiedi(AVVISO_CHIUSURA) : window.confirm(AVVISO_CHIUSURA)))) return;
       await invoke("esci");
     });
   }
@@ -445,7 +445,7 @@
         // Prima si ferma la rete di sicurezza che spegne dopo qualche
         // secondo, poi si chiede: la domanda puo' restare aperta a lungo.
         await invoke("annulla_uscita");
-        if (!window.confirm(AVVISO_CHIUSURA)) return;
+        if (!(await (window.chiedi ? window.chiedi(AVVISO_CHIUSURA) : window.confirm(AVVISO_CHIUSURA)))) return;
       }
       await invoke("conti_chiusi");
     });

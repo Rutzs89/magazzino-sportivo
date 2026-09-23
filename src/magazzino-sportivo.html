@@ -142,6 +142,10 @@ a.item:hover{background:var(--bg)}
 .omonimo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:2px 0}
 .omonimo+.omonimo{margin-top:8px}
 .filters.corti>.btn{flex:0 0 auto}
+/* Lo spazio dell'avviso del numero doppio c'e' sempre, anche vuoto: se no le
+   squadre con l'avviso hanno le colonne spostate rispetto alle altre. */
+.campi.unaRiga .slotAvviso{flex:0 0 9.5em;display:flex;overflow:hidden}
+.campi.unaRiga .slotAvviso .pill{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .filters.corti>input{flex:0 1 22em}
 .legenda{margin:0 0 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .legenda summary{cursor:pointer;padding:8px 12px;font-size:13.5px;color:var(--muted);list-style:none}
@@ -419,6 +423,8 @@ dialog{border:0;border-radius:14px;padding:0;background:var(--surface);color:var
 dialog::backdrop{background:rgba(20,26,33,.5)}
 dialog form{padding:18px 18px 16px;display:flex;flex-direction:column;overflow:auto;max-height:calc(100dvh - 40px)}
 dialog h2{margin:0 0 12px}
+dialog.conferma{width:min(460px,calc(100vw - 24px))}
+#confTesto{margin:0 0 16px;white-space:pre-line;line-height:1.45}
 .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
@@ -449,6 +455,8 @@ dialog h2{margin:0 0 12px}
 </nav>
 <main id="view"></main>
 <dialog id="dlg"><form id="dlgForm" method="dialog"></form></dialog>
+<dialog id="dlgConf" class="conferma"><form method="dialog"><p id="confTesto"></p>
+  <div class="dlg-actions"><button class="btn" value="no">Annulla</button><button class="btn primary" value="si">Conferma</button></div></form></dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -589,7 +597,7 @@ function maglieInConflitto(aid,squadra){
 async function preparaSpostamento(aid,squadra){
   const c=maglieInConflitto(aid,squadra);if(!c.length)return true;
   const numeri=c.map(([,d])=>d.numero).join(', ');
-  if(!confirm(`In ${teamLabel(squadra)} ${c.length===1?'il numero '+numeri+' è':'i numeri '+numeri+' sono'} già in uso.\nSpostare comunque l’atleta? ${c.length===1?'La sua maglia viene segnata':'Le sue maglie vengono segnate'} da cambiare.`))return false;
+  if(!await chiedi(`In ${teamLabel(squadra)} ${c.length===1?'il numero '+numeri+' è':'i numeri '+numeri+' sono'} già in uso.\nSpostare comunque l’atleta? ${c.length===1?'La sua maglia viene segnata':'Le sue maglie vengono segnate'} da cambiare.`))return false;
   return w(async()=>{for(const [id] of c)await S.db.doc('divise/'+id).update({daRestituire:true})});
 }
 
@@ -928,7 +936,7 @@ function vAtlete(){
     <div class="main campi unaRiga">
       <input type="text" id="sq_${esc(x.nome)}" class="inRiga nomeSq" value="${esc(x.nome)}" data-act="modSquadra" data-n="${esc(x.nome)}" data-f="nome" aria-label="Nome squadra" autocomplete="off">
       <span class="meta quanti">${cercando&&dentro.length!==n?`${dentro.length} di ${n}`:`${n} ${n===1?'atleta':'atleti'}`}</span>
-      ${suoi.length?`<span class="pill bad" title="Due atleti di questa squadra portano lo stesso numero">${suoi.length===1?`n.${suoi[0]} doppio`:`numeri doppi: ${suoi.join(', ')}`}</span>`:''}`+`
+      <span class="slotAvviso">${suoi.length?`<span class="pill bad" title="Due atleti di questa squadra portano lo stesso numero">${suoi.length===1?`n.${suoi[0]} doppio`:`numeri doppi: ${suoi.join(', ')}`}</span>`:''}</span>`+`
       ${lotti.length>1?`<select id="sl_${esc(x.nome)}" class="inRiga" data-act="modSquadra" data-n="${esc(x.nome)}" data-f="modelloDivisa" aria-label="Lotto divise di ${esc(teamLabel(x.nome))}">${lotti.map(m=>`<option value="${esc(m)}"${(x.modelloDivisa||'STANDARD')===m?' selected':''}>divise ${esc(m.toLowerCase())}</option>`).join('')}</select>`:''}
       <label class="check" style="margin:0"><input type="checkbox" id="inc_${esc(x.nome)}" data-act="modSquadra" data-n="${esc(x.nome)}" data-f="includi" ${x.includi!==false?'checked':''}><span class="meta">in distribuzione</span></label>
     </div>
@@ -1718,8 +1726,8 @@ function dlgTuttaSquadra(nome){
     if(!dentro.length){toast(fd.azione==='CONSEGNA'?'Tutti gli atleti possiedono già questo articolo':'Nessun atleta possiede questo articolo in questa taglia');return false}
     const pezzi=dentro.length*qta;
     const st=(D.stock[k]||{ora:0}).ora;
-    if(fd.azione==='CONSEGNA'&&st<pezzi&&!confirm(`Occorrono ${pezzi} pezzi e in magazzino ne risultano ${st}. Registrare comunque?`))return false;
-    if(!confirm(fd.azione==='CONSEGNA'
+    if(fd.azione==='CONSEGNA'&&st<pezzi&&!await chiedi(`Occorrono ${pezzi} pezzi e in magazzino ne risultano ${st}. Registrare comunque?`))return false;
+    if(!await chiedi(fd.azione==='CONSEGNA'
       ?`Consegnare ${qta>1?qta+' pezzi a testa, ':''}${artLabel(art)} ${tg==='UNICA'?'':tg} a ${dentro.length} ${dentro.length===1?'atleta':'atleti'}?`
       :`Registrare il rientro di ${artLabel(art)} ${tg==='UNICA'?'':tg} da ${dentro.length} ${dentro.length===1?'atleta':'atleti'}?`))return false;
     let chiuse=0;
@@ -1758,7 +1766,7 @@ function vImpostazioni(){
   let h=`<h1>Impostazioni</h1>`+legenda(`<p>Le impostazioni valgono per tutto l'archivio: stagione in corso, nome e stemma della società, caricamento dai fogli Excel, esportazioni, codici degli articoli, aspetto, aggiornamenti e copie di sicurezza. Ogni sezione riporta sotto il titolo che cosa fa.</p>`)+`
   <h2>Stagione</h2><div class="filters corti"><input type="text" id="stag" value="${esc(D.set.stagione)}" aria-label="Stagione"><button type="button" class="btn" data-act="saveStag">Salva stagione</button></div>
   <h2>Società</h2><p class="sub">Il nome e lo stemma compaiono in alto, accanto a «Magazzino», e il nome anche nel titolo della finestra. Sono salvati nell’archivio: il programma non appartiene a una società in particolare.</p>
-  <div class="filters"><input type="text" id="soc" value="${esc(D.set.societa||'')}" placeholder="Nome della società" aria-label="Nome della società"><button type="button" class="btn" data-act="saveSoc">Salva nome</button></div>
+  <div class="filters corti"><input type="text" id="soc" value="${esc(D.set.societa||'')}" placeholder="Nome della società" aria-label="Nome della società"><button type="button" class="btn" data-act="saveSoc">Salva nome</button></div>
   <div class="row-actions" style="margin-top:8px"><button type="button" class="btn" data-act="scegliLogo">${D.set.logo?'Cambia stemma…':'Carica lo stemma…'}</button>${D.set.logo?`<button type="button" class="btn ghost" data-act="togliLogo">Togli lo stemma</button>`:''}</div>
   <h2>Esporta</h2><p class="sub">File CSV apribili in Excel, utili come copia di sicurezza o per stampare le liste.</p><div class="row-actions">
   <button type="button" class="btn" data-act="exp" data-v="atlete">Atleti e divise</button><button type="button" class="btn" data-act="exp" data-v="divise">Magazzino divise</button>
@@ -1890,6 +1898,23 @@ function problemiDivise(){
   return out;
 }
 
+/* Le domande di conferma, dentro il programma e con la sua grafica.
+   Nel programma installato la conferma di sistema non va: il componente delle
+   finestre la sostituisce con una versione asincrona che, senza permesso,
+   viene rifiutata; prima ancora, senza await, tornava subito "si'" e ogni
+   domanda passava da sola senza essere mai mostrata. Si risponde sempre con
+   una promessa: chi chiede usa await chiedi(...).
+   Nel browser di prova resta la conferma normale; nelle prove automatiche la
+   risposta si puo' fissare con window.__rispostaConferme. */
+function chiedi(testo){
+  if(window.__rispostaConferme!==undefined)return Promise.resolve(!!window.__rispostaConferme);
+  if(!window.__APP)return Promise.resolve(window.confirm(testo));
+  return new Promise(risposta=>{
+    const d=$('#dlgConf');$('#confTesto').textContent=testo;d.returnValue='';
+    const chiuso=()=>{d.removeEventListener('close',chiuso);risposta(d.returnValue==='si')};
+    d.addEventListener('close',chiuso);d.showModal();d.querySelector('.primary').focus()});
+}
+window.chiedi=chiedi;
 /* ============ scritture ============ */
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3200)}
 async function w(fn){
@@ -2006,7 +2031,7 @@ async function annullaMovimento(id){
   }
   const foto=gruppo.flatMap(([,x])=>[x.richiesta,...(x.richieste||[])]).filter(r=>r&&!S.richieste[r.id]);
   const descr=gruppo.length>1?`questa operazione (${gruppo.length} movimenti insieme)`:`questo movimento (${m.tipo.toLowerCase()} ${artLabel(m.articolo)})`;
-  if(!confirm(`Annullare ${descr}?${foto.length?(foto.length===1?' La richiesta consegnata torna aperta.':` Le ${foto.length} richieste consegnate tornano aperte.`):''}`))return;
+  if(!await chiedi(`Annullare ${descr}?${foto.length?(foto.length===1?' La richiesta consegnata torna aperta.':` Le ${foto.length} richieste consegnate tornano aperte.`):''}`))return;
   const ok=await w(async()=>{
     for(const [xid,x] of gruppo){
       if(x.divisaId&&S.divise[x.divisaId])
@@ -2118,7 +2143,7 @@ function dlgMovimento(nomeFuori){
     const tg=fd.taglia;if(!tg){toast('Selezionare la taglia');return false}
     const qta=Math.max(1,Number(fd.qta)||1);
     const st=(D.stock[D.key(fd.articolo,tg)]||{ora:0}).ora;
-    if(fd.tipo==='CONSEGNA'&&st<qta&&!confirm(`In magazzino ne risultano ${st}. Registrare comunque l’uscita di ${qta}?`))return false;
+    if(fd.tipo==='CONSEGNA'&&st<qta&&!await chiedi(`In magazzino ne risultano ${st}. Registrare comunque l’uscita di ${qta}?`))return false;
     // Consegnando a un atleta si chiudono le sue richieste per quella cosa:
     // se no restano aperte e finiscono anche fra quelle da ordinare.
     const chiuse=aid&&fd.tipo==='CONSEGNA'?richiesteCoperte(aid,fd.articolo,tg,qta):[];
@@ -2211,8 +2236,8 @@ function dlgDiretta(aid){
     const qta=Math.max(1,Number(fd.qta)||1);
     const st=(D.stock[D.key(art,tg)]||{ora:0}).ora;
     const altra=collegati(aid).find(x=>Object.entries(D.dotazione[x]||{}).some(([k,v])=>v>0&&k.split('|')[0]===art));
-    if(altra&&!confirm(`${fullName(a)} ha già ricevuto questo articolo con la scheda di ${teamLabel(S.atlete[altra].squadra)}. Registrare comunque la consegna?`))return false;
-    if(st<qta&&!confirm(`In magazzino ne risultano ${st}. Registrare comunque la consegna di ${qta}?`))return false;
+    if(altra&&!await chiedi(`${fullName(a)} ha già ricevuto questo articolo con la scheda di ${teamLabel(S.atlete[altra].squadra)}. Registrare comunque la consegna?`))return false;
+    if(st<qta&&!await chiedi(`In magazzino ne risultano ${st}. Registrare comunque la consegna di ${qta}?`))return false;
     const ok=await w(()=>insieme(async()=>{
       await mov({tipo:'CONSEGNA',atletaId:aid,articolo:art,taglia:tg,qta,...(foto?{richiesta:foto}:{})});
       if(rid)await S.db.doc('richieste/'+rid).delete()}));
@@ -2269,7 +2294,7 @@ function dlgAltraTaglia(rid){
     // Provvisoria vuol dire: gliela diamo adesso, ma la richiesta resta
     // aperta e il capo e' gia' segnato da cambiare.
     const provv=diversa&&fd.provv==='on';
-    if(diversa&&!confirm(provv
+    if(diversa&&!await chiedi(provv
       ?`Consegnare una ${d.taglia} in via provvisoria? La richiesta della ${r.taglia} resta aperta e viene riproposta quando la taglia è disponibile.`
       :`Consegnare una ${d.taglia} al posto della ${r.taglia} chiesta? La richiesta si chiude qui.`))return false;
     const rit=ownReturning(r.atletaId,mod).filter(x=>x!==did);
@@ -2408,7 +2433,7 @@ function dlgUscita(id){
     await new Promise(r=>setTimeout(r,60));
     const restano=coseInMano(id);
     if(!restano.length){
-      if(confirm(`${fullName(a)} ha restituito tutto. Cancellare l’atleta dall’archivio?`)){setTimeout(()=>cancellaDavvero(id),0);return true}
+      if(await chiedi(`${fullName(a)} ha restituito tutto. Cancellare l’atleta dall’archivio?`)){setTimeout(()=>cancellaDavvero(id),0);return true}
       if(a.inUscita)await w(()=>S.db.doc('atlete/'+id).update({inUscita:false}));
       toast('Rientri registrati');return true}
     if(a.inUscita!==true)await w(()=>S.db.doc('atlete/'+id).update({inUscita:true}));
@@ -2428,7 +2453,7 @@ async function cancellaDavvero(id){
   const a=S.atlete[id];if(!a)return false;
   const richieste=Object.keys(S.richieste).filter(r=>S.richieste[r].atletaId===id);
   const movimenti=Object.entries(S.movimenti).filter(([,m])=>m.atletaId===id);
-  if(!confirm(`Eliminare ${fullName(a)}?${richieste.length?`\n${richieste.length===1?'Viene eliminata anche la sua richiesta aperta.':`Vengono eliminate anche le sue ${richieste.length} richieste aperte.`}`:''}${movimenti.length?`\n${movimenti.length===1?'Il movimento resta':`I ${movimenti.length} movimenti restano`} nel registro con il suo nome.`:''}\nL’operazione non è reversibile.`))return false;
+  if(!await chiedi(`Eliminare ${fullName(a)}?${richieste.length?`\n${richieste.length===1?'Viene eliminata anche la sua richiesta aperta.':`Vengono eliminate anche le sue ${richieste.length} richieste aperte.`}`:''}${movimenti.length?`\n${movimenti.length===1?'Il movimento resta':`I ${movimenti.length} movimenti restano`} nel registro con il suo nome.`:''}\nL’operazione non è reversibile.`))return false;
   const nome=fullName(a);
   const ok=await w(async()=>{
     for(const r of richieste)await S.db.doc('richieste/'+r).delete();
@@ -2450,7 +2475,7 @@ function dlgDivisa(id){
     <div class="field"><label for="dMod">Lotto</label><select id="dMod" name="modello">${[...new Set([...(D.set.modelli||['STANDARD']),d.modello||'STANDARD'])].map(m=>`<option value="${esc(m)}"${(d.modello||'STANDARD')===m?' selected':''}>${esc(cap(m))}</option>`).join('')}</select></div>
     <div class="field"><label for="dNote">Nota</label><input type="text" id="dNote" name="note" value="${esc(d.note||'')}" maxlength="200"></div>
     ${actions('Salva',!d.holder?`<button class="btn danger" value="dismetti" style="margin-right:auto">Segna come dismessa</button>`:'')}`,async(fd,btn)=>{
-      if(btn==='dismetti'){if(!confirm(`Segnare come dismessa la ${d.taglia} n.${d.numero}? Non comparirà più in magazzino.`))return false;const ok=await w(()=>S.db.doc('divise/'+id).update({dismessa:true,note:(fd.note?fd.note+' · ':'')+'dismessa '+today()}));if(ok)toast('Divisa dismessa');return ok}
+      if(btn==='dismetti'){if(!await chiedi(`Segnare come dismessa la ${d.taglia} n.${d.numero}? Non comparirà più in magazzino.`))return false;const ok=await w(()=>S.db.doc('divise/'+id).update({dismessa:true,note:(fd.note?fd.note+' · ':'')+'dismessa '+today()}));if(ok)toast('Divisa dismessa');return ok}
       const num=Number(fd.numero);const mod=fd.modello;const tg=fd.taglia;
       const cambia=tg!==d.taglia||num!==Number(d.numero)||mod!==(d.modello||'STANDARD');
       if(cambia){
@@ -2465,7 +2490,7 @@ function dlgDivisa(id){
         }
         const dup=Object.entries(S.divise).some(([x,y])=>x!==id&&!y.dismessa&&y.taglia===tg
           &&Number(y.numero)===num&&(y.modello||'STANDARD')===mod);
-        if(dup&&!confirm(`Esiste già una divisa ${tg} n.${num} di questo lotto. Salvare comunque?`))return false;
+        if(dup&&!await chiedi(`Esiste già una divisa ${tg} n.${num} di questo lotto. Salvare comunque?`))return false;
       }
       const ok=await w(()=>S.db.doc('divise/'+id).update({taglia:tg,numero:num,modello:mod,note:fd.note||''}));
       if(ok)toast(cambia?`Divisa corretta: ${tg} n.${num} · ${cap(mod)}`:'Nota salvata');return ok});return}
@@ -2477,7 +2502,7 @@ function dlgDivisa(id){
   ${actions('Aggiungi divisa',`<button class="btn" value="again" style="margin-right:auto">Aggiungi e continua</button>`)}`,async(fd,btn)=>{
     const num=Number(fd.numero);
     const dup=Object.values(S.divise).some(x=>!x.dismessa&&x.taglia===fd.taglia&&Number(x.numero)===num&&(x.modello||'STANDARD')===fd.modello);
-    if(dup&&!confirm(`Esiste già una divisa ${fd.taglia} n.${num} di questo lotto. Aggiungerla comunque?`))return false;
+    if(dup&&!await chiedi(`Esiste già una divisa ${fd.taglia} n.${num} di questo lotto. Aggiungerla comunque?`))return false;
     const ok=await w(()=>S.db.collection('divise').add({taglia:fd.taglia,numero:num,modello:fd.modello,holder:null,daRestituire:false,note:fd.note||''}));
     if(ok){toast(`Divisa ${fd.taglia} n.${num} aggiunta`);if(btn==='again'){form.querySelector('#nNum').value='';form.querySelector('#nNum').focus();return false}}return ok});
 }
@@ -2623,7 +2648,7 @@ document.addEventListener('click',async e=>{
     case'diretta':return dlgDiretta(id);
     case'consegna':return dlgConsegna(id);
     case'altraTaglia':return dlgAltraTaglia(id);
-    case'delRichiesta':{const r=S.richieste[id];if(!confirm(`Eliminare la richiesta di ${artLabel(r.articolo)} per ${fullName(S.atlete[r.atletaId])}?`))return;
+    case'delRichiesta':{const r=S.richieste[id];if(!await chiedi(`Eliminare la richiesta di ${artLabel(r.articolo)} per ${fullName(S.atlete[r.atletaId])}?`))return;
       if(await w(()=>S.db.doc('richieste/'+id).delete()))toast('Richiesta eliminata');return}
     case'toggleDR':{const d=S.divise[id];
       // Rimettendola "in uso" il suo numero torna occupato: se nel frattempo e'
@@ -2633,7 +2658,7 @@ document.addEventListener('click',async e=>{
           &&S.atlete[x.holder]&&S.atlete[x.holder].squadra===sq&&Number(x.numero)===Number(d.numero));
         if(altra){toast(`Il numero ${d.numero} è già di ${fullName(S.atlete[altra.holder])} in ${teamLabel(sq)}: la maglia resta da cambiare`);return}}
       if(await w(()=>S.db.doc('divise/'+id).update({daRestituire:!d.daRestituire})))toast(d.daRestituire?'Non la cambia più: il suo numero torna occupato':'Segnata da cambiare: torna disponibile per le assegnazioni');return}
-    case'rientroDivisa':{const d=S.divise[id];if(!confirm(`Registrare la restituzione della ${d.taglia} n.${d.numero}?`))return;
+    case'rientroDivisa':{const d=S.divise[id];if(!await chiedi(`Registrare la restituzione della ${d.taglia} n.${d.numero}?`))return;
       const chi=d.holder;
       if(await w(async()=>{await S.db.doc('divise/'+id).update({holder:null,daRestituire:false,tagliaChiesta:null});await mov({tipo:'RIENTRO',atletaId:d.holder,articolo:artDivisa(),taglia:d.taglia,divisaId:id,numero:d.numero,prevHolder:d.holder,prevDR:!!d.daRestituire,prevTC:d.tagliaChiesta||null})})){toast('Divisa rientrata in magazzino');fineUscita(chi)}return}
     case'rientroMat':return dlgRientroMat(id,el.dataset.art,el.dataset.tg);
@@ -2689,7 +2714,7 @@ document.addEventListener('click',async e=>{
       const D2=derive();const nome=el.dataset.n;
       const dentro=Object.values(S.atlete).filter(a=>a.squadra===nome).length;
       if(dentro){toast(`La squadra ha ancora ${dentro===1?'un atleta':dentro+' atleti'}: occorre spostarli in un’altra squadra prima di eliminarla`);return}
-      if(!confirm(`Eliminare la squadra ${teamLabel(nome)}?`))return;
+      if(!await chiedi(`Eliminare la squadra ${teamLabel(nome)}?`))return;
       const sq=(D2.set.squadre||[]).filter(y=>y.nome!==nome);
       if(await w(()=>S.db.doc('settings/main').update({squadre:sq})))toast('Squadra eliminata');
       return}
@@ -2701,10 +2726,10 @@ document.addEventListener('click',async e=>{
     case'exp':return esporta(el.dataset.v);
     case'salvaCopia':return window.__APP.esporta().then(d=>{if(d){toast('Copia salvata');chiediInfoCopie(true)}}).catch(e=>toast('Salvataggio della copia non riuscito: '+e));
     case'riprendiCopia':{
-      if(!confirm('Sostituire tutti i dati con quelli della copia?\nI dati attuali vengono prima salvati in una copia nella cartella delle copie di sicurezza.'))return;
+      if(!await chiedi('Sostituire tutti i dati con quelli della copia?\nI dati attuali vengono prima salvati in una copia nella cartella delle copie di sicurezza.'))return;
       return window.__APP.importa().then(d=>{if(d){toast('Dati ripresi dalla copia');chiediInfoCopie(true)}}).catch(e=>toast('Ripristino non eseguito: '+e));}
     case'riprendiAuto':{
-      if(!confirm(`Sostituire tutti i dati con la copia «${nomeCopia(el.dataset.v)}»?\nI dati attuali vengono prima salvati in una copia nella cartella delle copie di sicurezza.`))return;
+      if(!await chiedi(`Sostituire tutti i dati con la copia «${nomeCopia(el.dataset.v)}»?\nI dati attuali vengono prima salvati in una copia nella cartella delle copie di sicurezza.`))return;
       return window.__APP.riprendiCopiaAutomatica(el.dataset.v).then(()=>{toast('Dati ripresi dalla copia');chiediInfoCopie(true)}).catch(e=>toast('Ripristino non eseguito: '+e));}
     case'cartellaCopie':return window.__APP.scegliCartellaCopie().then(d=>{if(d){toast('Da ora le copie vengono salvate nella cartella scelta');chiediInfoCopie(true)}}).catch(e=>toast('Operazione non riuscita: '+e));
     case'scordaCartella':window.__APP.dimenticaCartellaCopie();toast('Le copie tornano accanto ai dati');chiediInfoCopie(true);return;
@@ -2720,7 +2745,7 @@ document.addEventListener('click',async e=>{
       catch(e){toast('Verifica non riuscita: '+e)}
       S.app.cercando=false;render();return}
     case'installaAgg':{
-      if(!confirm(`Installare la versione ${S.app.nuovaVersione}?
+      if(!await chiedi(`Installare la versione ${S.app.nuovaVersione}?
 Il programma salva i dati, si chiude e si riapre automaticamente. I dati non vengono modificati.`))return;
       // La barra si muove chiedendo ogni tanto al programma a che punto e':
       // sono sette megabyte, e venti secondi di schermo fermo sembrano un
@@ -2738,7 +2763,7 @@ Il programma salva i dati, si chiude e si riapre automaticamente. I dati non ven
         toast('Installazione non riuscita: '+e);return}
       clearInterval(battito);S.app.percento=100;render();
       return}
-    case'resetProva':if(window.__PROVA&&confirm('Cancellare tutte le prove e tornare ai dati iniziali?'))window.__PROVA.reset();return;
+    case'resetProva':if(window.__PROVA&&await chiedi('Cancellare tutte le prove e tornare ai dati iniziali?'))window.__PROVA.reset();return;
   }
 });
 
@@ -3225,7 +3250,7 @@ async function caricaModulo(){
 
   const quante=daFare.reduce((n,d)=>n+Object.values(d.articoli).filter(x=>['manca','cambia'].includes(modRisposta(x.risposta))).length,0);
   const nuove=[...squadreNuove];
-  if(!confirm(`Caricare ${daFare.length} ${daFare.length===1?'riga':'righe'} da ${(n=>n===1?'una squadra':n+' squadre')(new Set(daFare.map(d=>d.squadra)).size)}?\nRisposte che chiedono un articolo: ${quante}; quelle già presenti o già consegnate vengono ignorate.`
+  if(!await chiedi(`Caricare ${daFare.length} ${daFare.length===1?'riga':'righe'} da ${(n=>n===1?'una squadra':n+' squadre')(new Set(daFare.map(d=>d.squadra)).size)}?\nRisposte che chiedono un articolo: ${quante}; quelle già presenti o già consegnate vengono ignorate.`
     +(nuove.length?`\n\nAttenzione: ${nuove.length===1?'questo foglio non corrisponde':'questi fogli non corrispondono'} a nessuna squadra e ${nuove.length===1?'diventa una squadra nuova':'diventano squadre nuove'}: ${nuove.join(', ')}.`:'')))return;
 
   S.busy=true;render();
@@ -3342,7 +3367,7 @@ async function caricaModello(tipo){
   const dati=righe.slice(iTit+1).map(r=>pos.map(i=>i<0?'':(r[i]??''))).filter(r=>r.some(c=>String(c).trim()));
   if(!dati.length){toast('Nel foglio ci sono solo le intestazioni');return}
 
-  if(!confirm(`Caricare ${dati.length} ${dati.length===1?'riga':'righe'} dal foglio ${m.nome}?\nI dati già presenti non vengono modificati: le righe doppie vengono saltate.`))return;
+  if(!await chiedi(`Caricare ${dati.length} ${dati.length===1?'riga':'righe'} dal foglio ${m.nome}?\nI dati già presenti non vengono modificati: le righe doppie vengono saltate.`))return;
 
   S.busy=true;render();
   let esito;
