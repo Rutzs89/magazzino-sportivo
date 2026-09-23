@@ -14,7 +14,7 @@ use rust_xlsxwriter::{Format, Workbook};
 /// lo stesso foglio gia' pieno di quello che c'e' nel programma, buono sia da
 /// controllare sia da rimandare indietro modificato.
 #[tauri::command]
-pub fn scrivi_excel(
+pub async fn scrivi_excel(
     percorso: String,
     foglio: String,
     intestazioni: Vec<String>,
@@ -57,7 +57,7 @@ pub fn scrivi_excel(
             .map_err(|e| e.to_string())?;
     }
 
-    libro.save(&percorso).map_err(|e| format!("Non riesco a scrivere il file: {e}"))
+    libro.save(&percorso).map_err(|e| format!("Impossibile scrivere il file: {e}"))
 }
 
 
@@ -75,7 +75,7 @@ pub struct FoglioDati {
 /// squadra: cosi' chi compila non deve riscriverla su ogni riga, e non la puo'
 /// sbagliare.
 #[tauri::command]
-pub fn scrivi_excel_fogli(
+pub async fn scrivi_excel_fogli(
     percorso: String,
     fogli: Vec<FoglioDati>,
     istruzioni: Vec<String>,
@@ -118,14 +118,14 @@ pub fn scrivi_excel_fogli(
 
     libro
         .save(&percorso)
-        .map_err(|e| format!("Non riesco a scrivere il file: {e}"))
+        .map_err(|e| format!("Impossibile scrivere il file: {e}"))
 }
 
 /// Legge tutti i fogli, e per ognuno dice come si chiama.
 #[tauri::command]
-pub fn leggi_excel_fogli(percorso: String) -> Result<Vec<(String, Vec<Vec<String>>)>, String> {
+pub async fn leggi_excel_fogli(percorso: String) -> Result<Vec<(String, Vec<Vec<String>>)>, String> {
     let mut libro: Xlsx<_> =
-        open_workbook(&percorso).map_err(|e| format!("Non riesco ad aprire il file: {e}"))?;
+        open_workbook(&percorso).map_err(|e| format!("Impossibile aprire il file: {e}"))?;
     let nomi = libro.sheet_names().to_vec();
     let mut fuori = Vec::new();
     for nome in nomi {
@@ -167,9 +167,9 @@ fn pulisci_nome(n: &str) -> String {
 /// Tutto diventa testo, numeri compresi: i numeri interi senza decimali finti,
 /// perche' un numero di maglia letto come "8.0" poi non combacia con niente.
 #[tauri::command]
-pub fn leggi_excel(percorso: String) -> Result<Vec<Vec<String>>, String> {
+pub async fn leggi_excel(percorso: String) -> Result<Vec<Vec<String>>, String> {
     let mut libro: Xlsx<_> =
-        open_workbook(&percorso).map_err(|e| format!("Non riesco ad aprire il file: {e}"))?;
+        open_workbook(&percorso).map_err(|e| format!("Impossibile aprire il file: {e}"))?;
     let nome = libro
         .sheet_names()
         .first()
@@ -177,7 +177,7 @@ pub fn leggi_excel(percorso: String) -> Result<Vec<Vec<String>>, String> {
         .ok_or_else(|| "Il file non ha nessun foglio".to_string())?;
     let foglio = libro
         .worksheet_range(&nome)
-        .map_err(|e| format!("Non riesco a leggere il foglio: {e}"))?;
+        .map_err(|e| format!("Impossibile leggere il foglio: {e}"))?;
 
     let mut fuori = Vec::new();
     for riga in foglio.rows() {

@@ -75,14 +75,14 @@
       // bisogna dirlo, altrimenti si crede di avere copie che non ci sono.
       ultimoAvviso = avviso || null;
       if (avviso) {
-        if (window.toast) window.toast("Dati salvati, ma " + avviso);
+        if (window.toast) window.toast("Dati salvati; " + avviso);
         else console.error(avviso);
       }
     } catch (e) {
       // Non e' andata: i dati restano da scrivere, cosi' il prossimo giro
       // riprova invece di darli per salvati.
       sporco = true;
-      if (window.toast) window.toast("Non sono riuscito a salvare: " + e);
+      if (window.toast) window.toast("Salvataggio non riuscito: " + e);
       else console.error(e);
     }
   }
@@ -221,6 +221,27 @@
       no("le divise non hanno taglia e numero");
   }
 
+  /* Sostituisce l'archivio con quello del testo dato.
+   * Prima si controlla che sia davvero un archivio, poi si mette via quello di
+   * adesso nella cartella delle copie, con data e ora. Se quella copia non
+   * riesce ci si ferma: senza rete di sicurezza non si sostituisce niente. */
+  async function sostituisciArchivio(testo) {
+    var dati = JSON.parse(testo);
+    controllaArchivio(dati); // se non va, si ferma qui e non tocca niente
+    await invoke("copia_prima_di_importare", {
+      contenuto: JSON.stringify(senzaPreferenze(), null, 1),
+      cartellaCopie: config().cartellaCopie || null,
+    });
+    // Le preferenze di questo computer non si toccano: un file preparato da
+    // altri non deve poter dirottare dove finiscono i dati delle atlete.
+    var preferenze = store && store.__config ? store.__config : null;
+    delete dati.__config;
+    store = dati;
+    if (preferenze) store.__config = preferenze;
+    notify();
+    await salvaOra();
+  }
+
   /* --- copie di sicurezza, usate dalla schermata Impostazioni --- */
   var APP = {
     /** L'ultimo avviso sulla copia del giorno, da mostrare fisso e non a lampo. */
@@ -264,31 +285,17 @@
         filters: [{ name: "Archivio magazzino", extensions: ["json"] }],
       });
       if (!scelto || typeof scelto !== "string") return null;
-      var testo = await invoke("leggi_file", { percorso: scelto });
-      var dati = JSON.parse(testo);
-      controllaArchivio(dati); // se non va, si ferma qui e non tocca niente
-
-      // Rete di sicurezza: prima di sostituire tutto si mette via quello che
-      // c'e' adesso, accanto al file scelto. Il testo di conferma lo consiglia,
-      // ma consigliare non basta quando l'errore e' irreversibile.
-      try {
-        await invoke("scrivi_file", {
-          percorso: scelto.replace(/\.json$/i, "") + "-prima-di-importare.json",
-          contenuto: JSON.stringify(senzaPreferenze(), null, 1),
-        });
-      } catch (e) {
-        console.error("copia di sicurezza prima dell'importazione:", e);
-      }
-
-      // Le preferenze di questo computer non si toccano: un file preparato da
-      // altri non deve poter dirottare dove finiscono i dati delle atlete.
-      // Esplicito, non per effetto collaterale di qualcos'altro.
-      var preferenze = store && store.__config ? store.__config : null;
-      delete dati.__config;
-      store = dati;
-      if (preferenze) store.__config = preferenze;
-      notify();
+      await sostituisciArchivio(await invoke("leggi_file", { percorso: scelto }));
       return scelto;
+    },
+
+    /** Lo stesso, da una delle copie automatiche, scelta per nome. Sul Mac la
+        loro cartella non si apre dalla finestra "apri". */
+    riprendiCopiaAutomatica: async function (nome) {
+      await sostituisciArchivio(
+        await invoke("leggi_copia", { nome: nome, cartellaCopie: config().cartellaCopie || null }),
+      );
+      return nome;
     },
 
     /** Dove finiscono le copie del giorno: meglio un disco esterno. */
@@ -313,10 +320,14 @@
     cercaAggiornamento: function () {
       return invoke("cerca_aggiornamento");
     },
-    /** Scarica e installa. Il pacchetto passa solo se la firma corrisponde. */
+    /** Scarica, finisce di salvare, poi installa. Il pacchetto passa solo se
+        la firma corrisponde. Se i dati non si riescono a salvare non si
+        installa niente: il programma si chiuderebbe con le modifiche in sospeso. */
     installaAggiornamento: async function () {
-      await chiudiIConti(); // i dati al sicuro prima di toccare il programma
-      await invoke("installa_aggiornamento");
+      await invoke("scarica_aggiornamento");
+      if (!(await chiudiIConti()))
+        throw new Error("i dati non sono stati salvati, l'aggiornamento non è stato installato");
+      await invoke("applica_aggiornamento");
     },
     esci: function () {
       return invoke("esci");
@@ -350,13 +361,15 @@
       if (typeof f !== "string") return null;
       return invoke("leggi_immagine", { percorso: f });
     },
+    /* La parte Rust vuole solo testo: un numero in una casella faceva
+       rifiutare tutto il file, in silenzio. Qui si converte ogni casella. */
     scriviExcel: function (percorso, foglio, intestazioni, righe, istruzioni) {
       return invoke("scrivi_excel", {
         percorso: percorso,
-        foglio: foglio,
-        intestazioni: intestazioni,
-        righe: righe,
-        istruzioni: istruzioni,
+        foglio: testo(foglio),
+        intestazioni: (intestazioni || []).map(testo),
+        righe: tabellaDiTesto(righe),
+        istruzioni: (istruzioni || []).map(testo),
       });
     },
     leggiExcel: function (percorso) {
@@ -367,8 +380,14 @@
     scriviExcelFogli: function (percorso, fogli, istruzioni) {
       return invoke("scrivi_excel_fogli", {
         percorso: percorso,
-        fogli: fogli,
-        istruzioni: istruzioni,
+        fogli: (fogli || []).map(function (f) {
+          return {
+            nome: testo(f.nome),
+            intestazioni: (f.intestazioni || []).map(testo),
+            righe: tabellaDiTesto(f.righe),
+          };
+        }),
+        istruzioni: (istruzioni || []).map(testo),
       });
     },
     /** A che punto e' lo scaricamento: [byte presi, byte totali, finito]. */
@@ -382,10 +401,27 @@
 
   window.__APP = APP;
 
-  /** Finisce di scrivere tutto quello che manca. */
-  function chiudiIConti() {
-    return salvaOra();
+  function testo(v) {
+    return v == null ? "" : String(v);
   }
+  function tabellaDiTesto(righe) {
+    return (righe || []).map(function (r) {
+      return (r || []).map(testo);
+    });
+  }
+
+  /** Finisce di scrivere tutto quello che manca. Torna vero se e' tutto sul
+      disco, falso se il salvataggio non e' riuscito: prima tornava sempre
+      "fatto", e chiudendo il programma le ultime modifiche sparivano senza
+      nessun avviso. */
+  async function chiudiIConti() {
+    await salvaOra();
+    return !sporco;
+  }
+
+  var AVVISO_CHIUSURA =
+    "Le ultime modifiche non sono state salvate sul computer.\n\n" +
+    "Chiudere comunque il programma? Le modifiche non salvate andranno perse.";
 
   /* Sul Mac chiudere la finestra non chiude il programma: resta acceso nel Dock
    * (trappola gia' pagata con Valutazioni). Prima di sparire si scrive quello
@@ -394,7 +430,7 @@
   if (T.window && T.window.getCurrentWindow) {
     T.window.getCurrentWindow().onCloseRequested(async function (e) {
       e.preventDefault();
-      await chiudiIConti();
+      if (!(await chiudiIConti()) && !window.confirm(AVVISO_CHIUSURA)) return;
       await invoke("esci");
     });
   }
@@ -405,7 +441,12 @@
    * la pagina lo dice e Rust spegne. */
   if (T.event && T.event.listen) {
     T.event.listen("chiudi-i-conti", async function () {
-      await chiudiIConti();
+      if (!(await chiudiIConti())) {
+        // Prima si ferma la rete di sicurezza che spegne dopo qualche
+        // secondo, poi si chiede: la domanda puo' restare aperta a lungo.
+        await invoke("annulla_uscita");
+        if (!window.confirm(AVVISO_CHIUSURA)) return;
+      }
       await invoke("conti_chiusi");
     });
   }

@@ -139,14 +139,6 @@ def main() -> None:
     # --- le scritte che parlavano del mondo di claude.ai
     CAMBI = [
         ("'Sincronizzato'", "'Salvato sul computer'"),
-        (
-            "<h1>Dati non raggiungibili</h1><p class=\"sub\">Apri questa pagina da claude.ai: è lì che vivono i dati condivisi del magazzino.</p>",
-            "<h1>Dati non raggiungibili</h1><p class=\"sub\">Il programma non riesce ad aprire il suo archivio. Chiudi e riapri; se continua, riprendi da una copia di sicurezza.</p>",
-        ),
-        (
-            "<h1>Archivio vuoto</h1><p class=\"sub\">Non ci sono ancora dati. Chiedi a Claude di caricare i dati iniziali.</p>",
-            "<h1>Archivio vuoto</h1><p class=\"sub\">Non ci sono ancora dati. Da Impostazioni puoi riprendere da una copia di sicurezza.</p>",
-        ),
     ]
     for vecchio, nuovo in CAMBI:
         assert vecchio in html, f"punto di aggancio mancante: {vecchio[:50]}"

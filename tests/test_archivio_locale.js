@@ -43,11 +43,16 @@ let scritture = 0;
 // mai e il difetto piu' grave non si puo' nemmeno riprodurre: la scrittura vera
 // fa sync sul disco e poi la copia del giorno, che puo' stare su una chiavetta.
 let ritardo = 0;
+let salvataggioRotto = false; // disco pieno, antivirus: il salvataggio fallisce
+let copieRotte = false; // la cartella delle copie non si puo' scrivere
+const copiePrima = []; // le copie fatte prima di un ripristino
+const passi = []; // l'ordine dei passi dell'aggiornamento
 const invoke = async (nome, arg) => {
   switch (nome) {
     case "carica_dati":
       return disco.dati;
     case "salva_dati": {
+      if (salvataggioRotto) throw new Error("disco pieno");
       scritture++;
       const contenuto = arg.contenuto;
       if (ritardo) await new Promise((r) => setTimeout(r, ritardo));
@@ -64,6 +69,18 @@ const invoke = async (nome, arg) => {
     case "leggi_file":
       if (!(arg.percorso in disco.file)) throw new Error("file inesistente");
       return disco.file[arg.percorso];
+    case "copia_prima_di_importare":
+      if (copieRotte) throw new Error("cartella delle copie non scrivibile");
+      copiePrima.push(arg.contenuto);
+      return "C:\finto\copie\prima-di-riprendere.json";
+    case "annulla_uscita":
+      return null;
+    case "scarica_aggiornamento":
+      passi.push("scarica");
+      return null;
+    case "applica_aggiornamento":
+      passi.push("installa");
+      return null;
     default:
       throw new Error("comando sconosciuto: " + nome);
   }
@@ -151,7 +168,10 @@ const ok = (c, m) => {
 
   /* 3. una consegna deve restare scritta sul disco, non solo a schermo */
   const primaDelle = scritture;
-  const bottone = w.document.querySelector('[data-act="consegna"]');
+  // Una consegna di divisa: e' quella che cambia chi tiene il capo.
+  const bottone = [...w.document.querySelectorAll('[data-act="consegna"]')].find(
+    (b) => D.prop[b.dataset.id] && D.prop[b.dataset.id].divisaId,
+  );
   ok(!!bottone, "dopo il caricamento l'elenco delle consegne c'e'");
   const rid = bottone.dataset.id;
   const divisaId = D.prop[rid].divisaId;
@@ -251,6 +271,56 @@ const ok = (c, m) => {
     Object.keys(JSON.parse(disco.dati).atlete || {}).length === 143,
     "dopo i quattro file finti il magazzino e' ancora tutto li'",
   );
+
+  /* 6. prima di un ripristino si mette via quello che c'e', e se non si puo'
+     il ripristino non si fa */
+  ok(copiePrima.length > 0, `ogni ripristino e' preceduto da una copia dei dati di prima (${copiePrima.length})`);
+  const buono = JSON.parse(disco.dati);
+  const altro = JSON.parse(JSON.stringify(buono));
+  const unaAtleta = Object.keys(altro.atlete)[0];
+  delete altro.atlete[unaAtleta];
+  prossimoApri = "D:\altro.json";
+  disco.file[prossimoApri] = JSON.stringify(altro);
+  copieRotte = true;
+  let fermato = false;
+  try {
+    await w.__APP.importa();
+  } catch (e) {
+    fermato = true;
+  }
+  copieRotte = false;
+  await attendi(500);
+  ok(
+    fermato && JSON.parse(disco.dati).atlete[unaAtleta],
+    "se la copia di sicurezza non si puo' fare, il ripristino non sostituisce niente",
+  );
+
+  /* 7. un salvataggio non riuscito non si fa passare per riuscito */
+  salvataggioRotto = true;
+  w.eval("S.db.doc('atlete/" + unaAtleta + "').update({note:'modifica non salvata'})");
+  await attendi(50);
+  const salvato = await w.__APP.finisciDiScrivere();
+  ok(salvato === false, "se il salvataggio fallisce, la chiusura lo sa e puo' avvisare");
+  salvataggioRotto = false;
+  ok((await w.__APP.finisciDiScrivere()) === true, "e appena il disco torna disponibile i dati vengono scritti");
+
+  /* 8. aggiornamento: scarica, salva, installa; e se non salva non installa */
+  w.eval("S.db.doc('atlete/" + unaAtleta + "').update({note:'prima di aggiornare'})");
+  const scrittePrima = scritture;
+  await w.__APP.installaAggiornamento();
+  ok(passi.join(",") === "scarica,installa" && scritture > scrittePrima,
+    "l'aggiornamento scarica, salva i dati e solo dopo installa");
+  passi.length = 0;
+  salvataggioRotto = true;
+  w.eval("S.db.doc('atlete/" + unaAtleta + "').update({note:'non salvata'})");
+  let fermato2 = false;
+  try {
+    await w.__APP.installaAggiornamento();
+  } catch (e) {
+    fermato2 = true;
+  }
+  salvataggioRotto = false;
+  ok(fermato2 && !passi.includes("installa"), "se i dati non si salvano, l'aggiornamento non si installa");
 
   ok(errs.length === 0, "nessun errore JavaScript " + errs.join("; "));
   process.exit(falliti ? 1 : 0);

@@ -82,6 +82,7 @@ const ARCHIVIO_VUOTO = JSON.stringify({
   },
 });
 const disco = { dati: ARCHIVIO_VUOTO, file: {} };
+const modulo = { scritto: null, daLeggere: null }; // il modulo di distribuzione
 const invoke = async (nome, arg) => {
   switch (nome) {
     case "carica_dati": return disco.dati;
@@ -90,6 +91,8 @@ const invoke = async (nome, arg) => {
     case "elenco_copie": return [];
     case "scrivi_file": disco.file[arg.percorso] = arg.contenuto; return null;
     case "leggi_file": return disco.file[arg.percorso];
+    case "scrivi_excel_fogli": modulo.scritto = arg; return null;
+    case "leggi_excel_fogli": return modulo.daLeggere;
     default: throw new Error("comando sconosciuto: " + nome);
   }
 };
@@ -99,7 +102,11 @@ const dom = new JSDOM(fs.readFileSync(PAGINA, "utf8"), {
   pretendToBeVisual: true,
   url: "https://x.test/#impostazioni",
   beforeParse(w) {
-    w.__TAURI__ = { core: { invoke }, dialog: {}, process: { exit() {} } };
+    w.__TAURI__ = {
+      core: { invoke },
+      dialog: { save: async () => "C:\\finto\\modulo.xlsx", open: async () => "C:\\finto\\modulo.xlsx" },
+      process: { exit() {} },
+    };
     w.scrollTo = () => {};
     w.confirm = () => true;
     w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
@@ -222,6 +229,76 @@ const carica = async (tipo, righe) => {
     Object.values(per).every((v) => v === 1),
     "nessun numero proposto due volte nella stessa squadra",
   );
+
+  /* 7. ricaricare i fogli scaricati dal programma non cambia niente */
+  const ricPrima = Object.keys(w.eval("S.richieste")).length;
+  const righeRicOra = w.eval("MODELLI_EXCEL.richieste.righe()");
+  ok(
+    righeRicOra.every((r) => r.every((c) => typeof c === "string")),
+    "il foglio Richieste esce tutto in testo (la parte Rust rifiuta i numeri)",
+  );
+  const a7 = await carica("richieste", righeRicOra);
+  await attendi(500);
+  ok(
+    Object.keys(w.eval("S.richieste")).length === ricPrima,
+    `ricaricando il foglio Richieste non si raddoppia niente (${ricPrima} -> ${Object.keys(w.eval("S.richieste")).length}, saltate ${a7.saltati})`,
+  );
+  const taglieArt = () => JSON.stringify(w.eval("S.settings.articoli").map((x) => x.taglie));
+  const primaT = taglieArt();
+  const matPrima = Object.keys(w.eval("S.materiale")).length;
+  await carica("articoli", w.eval("MODELLI_EXCEL.articoli.righe()"));
+  await attendi(500);
+  ok(
+    taglieArt() === primaT && Object.keys(w.eval("S.materiale")).length === matPrima,
+    "ricaricando il foglio Articoli le taglie in anni non si sdoppiano",
+  );
+
+  /* 8. casi scritti a mano */
+  const divPrima = Object.keys(w.eval("S.divise")).length;
+  const a8 = await carica("divise", [["STANDARD", "M", "", "", "", "", "", ""]]);
+  await attendi(300);
+  ok(
+    a8.problemi.length === 1 && Object.keys(w.eval("S.divise")).length === divPrima,
+    "una divisa senza numero viene segnalata, non diventa la n.0",
+  );
+  ok(w.eval("modRisposta('non mi manca')") === "?", "\"non mi manca\" non viene letto come \"mi manca\"");
+  ok(w.eval("modRisposta('Mi manca')") === "manca" && w.eval("modRisposta('ce l’ho')") === "ha", "le risposte normali restano capite");
+  ok(
+    JSON.stringify(w.eval("fogliSquadre(['UNDER 13/14 FEMMINILE SQUADRA B MOLTO LUNGA','UNDER 13/14 FEMMINILE SQUADRA B MOLTO LUNGA 2','Istruzioni'])"))
+      === JSON.stringify(["UNDER 13 14 FEMMINILE SQUADRA B", "UNDER 13 14 FEMMINILE SQUAD (2)", "Istruzioni (2)"]),
+    "i nomi dei fogli delle squadre sono validi e tutti diversi",
+  );
+
+  /* 9. il modulo di distribuzione: si scarica, si compila, si ricarica */
+  await w.eval("scaricaModulo()");
+  await attendi(300);
+  ok(modulo.scritto && modulo.scritto.fogli.length === w.eval("derive().perServire.length"),
+    "il modulo esce con un foglio per squadra");
+  const f0 = modulo.scritto.fogli[0];
+  const tit = f0.intestazioni;
+  // un articolo con le taglie che il primo atleta del foglio non ha ancora chiesto
+  const scelta = w.eval(`(()=>{const D=derive();const tit=${JSON.stringify(tit)};const r0=${JSON.stringify(f0.righe[0])};
+    const sq=${JSON.stringify(f0.nome)};
+    const aid=Object.keys(S.atlete).find(k=>S.atlete[k].squadra===sq&&S.atlete[k].cognome===r0[0]&&S.atlete[k].nome===r0[1]);
+    for(let i=0;i<tit.length;i++){const a=articoloDaNome(D,tit[i]);if(!a||!tit.includes(tit[i]+' taglia'))continue;
+      if(Object.values(S.richieste).some(r=>r.atletaId===aid&&r.articolo===a.nome))continue;
+      return {i,taglia:a.taglie[0]}}return null})()`);
+  const riga = [...f0.righe[0]];
+  riga[scelta.i] = "mi manca";
+  riga[tit.indexOf(tit[scelta.i] + " taglia")] = String(scelta.taglia).toLowerCase();
+  const riga2 = [...f0.righe[1]];
+  riga2[scelta.i] = "non mi manca";
+  modulo.daLeggere = [[f0.nome, [tit, riga, riga2]], [f0.nome + " (2)", [tit, riga]]];
+  const ricPrimaModulo = Object.keys(w.eval("S.richieste")).length;
+  await w.eval("caricaModulo()");
+  await attendi(900);
+  const ricDopoModulo = Object.keys(w.eval("S.richieste")).length;
+  ok(ricDopoModulo === ricPrimaModulo + 1, `il modulo compilato crea la richiesta, una volta sola anche col foglio copiato (${ricPrimaModulo} -> ${ricDopoModulo})`);
+  const probl = w.eval("S.app.problemiExcel") || [];
+  ok(probl.some((p) => /non riconosciuta/i.test(p)), "la risposta 'non mi manca' viene segnalata invece di creare una richiesta");
+  await w.eval("caricaModulo()");
+  await attendi(900);
+  ok(Object.keys(w.eval("S.richieste")).length === ricDopoModulo, "ricaricando lo stesso modulo non nasce niente di nuovo");
 
   ok(errs.length === 0, "nessun errore JavaScript " + errs.join("; "));
   process.exit(falliti ? 1 : 0);

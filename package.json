@@ -3,7 +3,7 @@
   "private": true,
   "description": "Magazzino divise e materiale per societa sportive",
   "scripts": {
-    "test": "node tests/test_app.js && npm run build:app && node tests/test_archivio_locale.js && node tests/test_excel.js",
+    "test": "node tests/test_app.js && npm run build:app && node tests/test_archivio_locale.js && node tests/test_excel.js && node tests/test_migrazione.js",
     "build:prova": "python tools/build_prova.py",
     "build:app": "python tools/build_app.py",
     "tauri": "tauri",
