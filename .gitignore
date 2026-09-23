@@ -1,0 +1,43 @@
+# === DATI DELLE ATLETE: NON VANNO ONLINE, MAI ===
+# Nomi di atlete minorenni e, negli originali, mail e telefoni delle famiglie.
+# Restano sul computer. Il programma nasce vuoto: l'archivio di una societa'
+# si carica da Impostazioni -> Riprendi da una copia.
+data/
+# La versione di prova ha i dati incorporati dentro il file
+dist/
+src-tauri/dist/
+
+# Dove Rust compila: e' una scelta di QUESTO computer (su Windows serve a
+# tenere fuori OneDrive) e contiene un percorso assoluto. Versionandolo, sul
+# Mac quel "C:" diventa parte di un nome di cartella e la compilazione muore
+# con "path segment contains separator". Ogni computer si tiene il suo.
+src-tauri/.cargo/
+
+# === roba generata ===
+node_modules/
+__pycache__/
+*.pyc
+src-tauri/target/
+src-tauri/gen/
+
+# pacchetti scaricati dalla release
+sito/.vercel/
+sito/.env.local
+sito/_pacchetti/
+sito/*.dmg
+sito/*.exe
+sito/*.msi
+sito/*.tar.gz
+sito/*.zip
+sito/ultima-versione.json
+# il logo lo ricopia lo script di pubblicazione da assets/
+sito/icona.png
+
+# chiavi e segreti, se mai finissero qui per sbaglio
+*.key
+*.pem
+password.txt
+
+# Gli appunti di lavoro per Claude: parlano della prima societa' che usa il
+# programma (nome, casi, collegamenti). Restano sul computer.
+CLAUDE.md

@@ -1,0 +1,21 @@
+{
+  "name": "magazzino-sportivo",
+  "private": true,
+  "description": "Magazzino divise e materiale per societa sportive",
+  "scripts": {
+    "test": "node tests/test_app.js && npm run build:app && node tests/test_archivio_locale.js && node tests/test_excel.js",
+    "build:prova": "python tools/build_prova.py",
+    "build:app": "python tools/build_app.py",
+    "tauri": "tauri",
+    "app": "tauri dev",
+    "app:build": "tauri build",
+    "font": "python tools/scarica_font.py",
+    "test:app": "node tests/test_archivio_locale.js",
+    "privacy": "python tools/controlla_privacy.py",
+    "test:excel": "node tests/test_excel.js"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.5",
+    "jsdom": "^24.0.0"
+  }
+}

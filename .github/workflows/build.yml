@@ -1,0 +1,85 @@
+# Costruisce il programma per Mac e per Windows quando si pubblica un tag vX.Y.Z.
+#
+# Serve perche' il programma si sviluppa su Windows ma gira su un Mac: la
+# versione Mac la costruisce un computer di GitHub. I pacchetti finiscono
+# allegati a una bozza di release, da cui poi li prende
+# tools/pubblica_aggiornamento.py.
+
+name: Costruisci il programma
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  costruisci:
+    permissions:
+      # Senza questo il caricamento nella release fallisce con
+      # "Resource not accessible by integration". Trappola gia' pagata.
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - piattaforma: macos-latest
+            args: "--target universal-apple-darwin"
+          - piattaforma: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.piattaforma }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python (serve a preparare le schermate)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.piattaforma == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Ricorda quello che Rust ha gia' compilato
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          # La chiave deve cambiare da un sistema all'altro, altrimenti i due
+          # si sovrascrivono a vicenda. Trappola gia' pagata.
+          key: ${{ matrix.piattaforma }}
+
+      # Su Mac, setup-python mette una variabile che cargo non riesce a
+      # rileggere: fallisce con "failed to join paths from
+      # $DYLD_FALLBACK_LIBRARY_PATH together" appena comincia a compilare.
+      # Python serve (le schermate le prepara uno script Python), quindi si
+      # svuota la variabile invece di rinunciare a Python.
+      - name: Togli di mezzo il conflitto fra Python e cargo (solo Mac)
+        if: matrix.piattaforma == 'macos-latest'
+        run: echo "DYLD_FALLBACK_LIBRARY_PATH=" >> $GITHUB_ENV
+
+      - name: Installa quello che serve
+        run: npm ci
+
+      - name: Costruisci e allega alla bozza di release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # La chiave privata va generata CON una password: una chiave senza
+          # password fa fallire la compilazione con "wrong password for that
+          # key", perche' il segreto vuoto non arriva vuoto. Trappola gia' pagata.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Magazzino Sportivo ${{ github.ref_name }}"
+          releaseBody: "Pacchetti per Mac e Windows."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

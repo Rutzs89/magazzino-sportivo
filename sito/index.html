@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magazzino Sportivo</title>
+<meta name="description" content="Scarica il programma Magazzino Sportivo.">
+<style>
+:root{
+  --bg:#EEF0F2; --surface:#FFFFFF; --ink:#1C2430; --muted:#5E6875;
+  --line:#D6DAE0; --yellow:#F2C230; --ombra:0 1px 2px rgba(28,36,48,.06),0 8px 24px rgba(28,36,48,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--bg:#12171E; --surface:#1A2129; --ink:#E8EBEF; --muted:#9AA4B1; --line:#2A333D;
+    --ombra:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3)}
+}
+:root[data-theme="dark"]{--bg:#12171E; --surface:#1A2129; --ink:#E8EBEF; --muted:#9AA4B1; --line:#2A333D;
+  --ombra:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3)}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:48px 16px 72px}
+.foglio{max-width:640px;margin:0 auto}
+header{display:flex;align-items:center;gap:14px;margin-bottom:34px}
+header img{width:52px;height:52px;flex:none}
+h1{font-size:30px;line-height:1.15;margin:0;letter-spacing:-.01em}
+.sotto{color:var(--muted);margin:4px 0 0;font-size:15px}
+.carta{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  padding:22px;box-shadow:var(--ombra);margin-bottom:18px}
+h2{font-size:18px;margin:0 0 6px}
+.carta p{margin:0 0 16px;color:var(--muted);font-size:15px}
+.giu{display:inline-flex;align-items:center;gap:9px;background:var(--yellow);color:#1C2430;
+  text-decoration:none;font-weight:600;padding:12px 20px;border-radius:10px;border:1px solid rgba(0,0,0,.12)}
+.giu:hover{filter:brightness(.95)}
+.giu svg{width:19px;height:19px}
+ol{margin:0;padding-left:20px;color:var(--muted);font-size:15px}
+ol li{margin-bottom:7px}
+ol li b{color:var(--ink);font-weight:600}
+.nota{font-size:14px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;margin-top:4px}
+footer{text-align:center;color:var(--muted);font-size:13.5px;margin-top:30px}
+code.riga{display:block;margin:6px 0;padding:8px 10px;user-select:all;-webkit-user-select:all;overflow-x:auto;white-space:nowrap}
+code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="foglio">
+
+<header>
+  <img src="icona.png" alt="">
+  <div>
+    <h1>Magazzino Sportivo</h1>
+    <p class="sotto">Divise e materiale, per la tua società</p>
+  </div>
+</header>
+
+<div class="carta">
+  <h2>Per Mac</h2>
+  <p>Una volta installato, il programma si aggiorna da solo: te lo dice lui quando c'è una versione nuova.</p>
+  <a class="giu" href="/MagazzinoSportivo-per-Mac.dmg" download>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg>
+    Scarica per Mac
+  </a>
+</div>
+
+<div class="carta">
+  <h2>Per Windows</h2>
+  <p>Lo stesso file serve sia a installare la prima volta sia ad aggiornare.</p>
+  <a class="giu" href="/MagazzinoSportivo-per-Windows.exe" download>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg>
+    Scarica per Windows
+  </a>
+</div>
+
+<div class="carta">
+  <h2>La prima apertura sul Mac</h2>
+  <ol>
+    <li>Apri il file scaricato: compare una finestra col programma e la cartella Applicazioni.</li>
+    <li><b>Trascina Magazzino Sportivo dentro Applicazioni.</b> Non aprirlo da questa finestra: da lì non parte.</li>
+    <li>Chiudi la finestra ed <b>espelli il disco</b> che è comparso sulla scrivania.</li>
+    <li><b>Apri il Terminale</b> — premi <b>cmd + barra spaziatrice</b>, scrivi <i>terminale</i>, premi Invio —
+        e incolla questa riga tale e quale, virgolette comprese, poi premi Invio:
+        <code class="riga">xattr -cr "/Applications/Magazzino Sportivo.app"</code>
+        Il Terminale non scrive nessun messaggio: va a capo e torna pronto per un altro comando. Quello vuol dire che ha funzionato — nel Terminale i comandi riusciti tacciono, parlano solo quando qualcosa non va. Poi chiudi il Terminale.</li>
+    <li>Adesso apri <b>Magazzino Sportivo</b> da Applicazioni. Da qui in poi si apre come qualsiasi programma.</li>
+  </ol>
+  <p class="nota"><b>Perché serve quella riga.</b> macOS blocca i programmi che non hanno un certificato
+  Apple, che costa 99 dollari l'anno. Il comando toglie al programma il contrassegno di «scaricato da
+  internet»: non cambia niente dentro il programma e non abbassa nessuna protezione del Mac.
+  Serve <b>una volta sola</b>, alla prima installazione: gli aggiornamenti che il programma si scarica
+  da solo non passano da quel controllo.</p>
+</div>
+
+<div class="carta">
+  <h2>Dove stanno i dati</h2>
+  <p style="margin:0">Sul tuo computer, in un file che nessun altro vede. Il programma non manda niente
+  su internet e non chiede nessun account. Ogni giorno in cui lo usi mette via una copia dei dati, e
+  tiene le ultime trenta: le trovi in Impostazioni, dove puoi anche salvarne una dove vuoi tu.</p>
+</div>
+
+<footer>Magazzino Sportivo</footer>
+
+</div>
+</body>
+</html>
