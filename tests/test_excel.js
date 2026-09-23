@@ -388,18 +388,51 @@ const carica = async (tipo, righe) => {
     "e le squadre sono nello stesso ordine di distribuzione",
   );
 
-  /* 12. le esportazioni CSV: intestazione e righe allineate */
-  for (const kind of ["atlete", "divise", "materiale", "assegnazioni", "movimenti"]) {
-    disco.file = {};
-    await w.eval(`esporta('${kind}')`);
-    await attendi(200);
-    const testo = Object.values(disco.file)[0] || "";
-    const righe = testo.replace(/^\ufeff/, "").split("\r\n").filter(Boolean);
-    const campi = (r) => { let n = 1, dentro = false; for (const c of r) { if (c === '"') dentro = !dentro; else if (c === ";" && !dentro) n++; } return n; };
-    const n0 = righe.length ? campi(righe[0]) : 0;
-    ok(righe.length >= 1 && righe.every((r) => campi(r) === n0),
-      `CSV ${kind}: ${righe.length - 1} righe, tutte con le ${n0} colonne dell'intestazione`);
-  }
+  /* 12. le colonne informative e il foglio dei movimenti */
+  ok(
+    fogli.every((f, k) => f.intestazioni.length === w.eval(`MODELLI_EXCEL.${TIPI[k]}.colonne.length+(MODELLI_EXCEL.${TIPI[k]}.info||[]).length`)),
+    "ogni foglio esce con le colonne da caricare e quelle solo informative",
+  );
+  await w.eval("scaricaMovimenti()");
+  await attendi(200);
+  const mov = fogliScritti["Movimenti"];
+  ok(!mov || mov.righe.every((r) => r.length === mov.intestazioni.length && r.every((c) => typeof c === "string")),
+    `il foglio dei movimenti ha righe allineate (${mov ? mov.righe.length : 0} movimenti)`);
+  ok(!w.document.querySelector('[data-act="exp"]') && typeof w.esporta === "undefined",
+    "le esportazioni CSV non ci sono piu': un solo posto per i fogli");
+
+  /* 13. i controlli al caricamento: errori, avvisi, anteprima senza scritture */
+  const primaControlli = conta();
+  const esame = await w.eval(`MODELLI_EXCEL.articoli.applica([
+    ['ARTICOLO PROVA','forse','M','3','',''],
+    ['ARTICOLO PROVA','no','05/06/2026','3','',''],
+    ['ARTICOLO PROVA','no','L','2,5','',''],
+    ['ARTICOLO PROVA','no','XL','4','A 1','2026'],
+    ['ARTICOLO PROVA','no','S','4','',''],
+    ['ARTICOLO PROVA','no','S','4','','']],true)`);
+  ok(esame.problemi.length === 4, `articoli: 4 righe sbagliate riconosciute (${esame.problemi.length}): ${esame.problemi.join(' | ')}`);
+  ok(esame.avvisi.some((a) => /più volte/.test(a)), "articoli: la riga ripetuta viene segnalata");
+  ok(JSON.stringify(conta()) === JSON.stringify(primaControlli), "il giro di prova non scrive niente");
+  const unAtleta = w.eval("Object.values(S.atlete)[0]");
+  const esameA = await w.eval(`MODELLI_EXCEL.atlete.applica([
+    ['U99','Rossi','','','',''],
+    ['U99','Provetta','Esempia','chiamare il +39 in serata','',''],
+    ['U99','Verdi','Eva','','forse',''],
+    [${JSON.stringify(unAtleta.squadra)},${JSON.stringify(unAtleta.cognome)},${JSON.stringify(unAtleta.nome)},'','no','']],true)`);
+  ok(esameA.problemi.length === 2 && esameA.avvisi.some((a) => /recapito/.test(a)) && esameA.squadreNuove.includes("U99"),
+    `atleti: dati mancanti e valori non ammessi segnalati, nota con recapito scartata, squadra nuova annunciata (${esameA.problemi.length} errori)`);
+  const conDivisa = w.eval("(()=>{const d=Object.values(S.divise).find(x=>x.holder&&!x.daRestituire&&!x.dismessa&&(x.modello||'STANDARD')==='STANDARD');const a=S.atlete[d.holder];const altro=Object.values(S.atlete).find(y=>y.squadra===a.squadra&&y!==a);return {n:d.numero,t:d.taglia,a,altro}})()");
+  const esameD = await w.eval(`MODELLI_EXCEL.divise.applica([
+    ['STANDARD','M','120','','','','',''],
+    ['STANDARD','M','','','','','',''],
+    ['STANDARD','XL','${conDivisa.n}',${JSON.stringify(conDivisa.altro.squadra)},${JSON.stringify(conDivisa.altro.cognome)},${JSON.stringify(conDivisa.altro.nome)},'','']],true)`);
+  ok(esameD.problemi.length === 2 && esameD.avvisi.some((x) => /risulterà doppio/.test(x)),
+    `divise: numero fuori intervallo e numero mancante rifiutati, numero già in uso in squadra segnalato (${esameD.problemi.join(' | ')})`);
+  const esameR = await w.eval(`MODELLI_EXCEL.richieste.applica([
+    [${JSON.stringify(unAtleta.squadra)},${JSON.stringify(unAtleta.cognome)},${JSON.stringify(unAtleta.nome)},'ARTICOLO CHE NON ESISTE','M','','',''],
+    [${JSON.stringify(unAtleta.squadra)},${JSON.stringify(unAtleta.cognome)},${JSON.stringify(unAtleta.nome)},'DIVISA GARA','M','200','',''],
+    [${JSON.stringify(unAtleta.squadra)},${JSON.stringify(unAtleta.cognome)},${JSON.stringify(unAtleta.nome)},'DIVISA GARA','M','','','PORTIERE']],true)`);
+  ok(esameR.problemi.length === 3, `richieste: articolo sconosciuto, numero non valido e tipo non ammesso segnalati (${esameR.problemi.length})`);
 
   ok(errs.length === 0, "nessun errore JavaScript " + errs.join("; "));
   process.exit(falliti ? 1 : 0);

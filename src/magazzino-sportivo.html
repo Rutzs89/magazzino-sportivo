@@ -142,6 +142,11 @@ a.item:hover{background:var(--bg)}
 .omonimo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:2px 0}
 .omonimo+.omonimo{margin-top:8px}
 .filters.corti>.btn{flex:0 0 auto}
+.soloInfo{opacity:.75}
+.esitoTit{margin:14px 0 6px;font-size:15px}
+.esitoTit.bad{color:var(--bad)}
+.esitoLista{margin:0;padding-left:18px;max-height:34vh;overflow:auto;font-size:13.5px;line-height:1.45}
+.esitoLista li{margin:0 0 4px}
 /* Lo spazio dell'avviso del numero doppio c'e' sempre, anche vuoto: se no le
    squadre con l'avviso hanno le colonne spostate rispetto alle altre. */
 .campi.unaRiga .slotAvviso{flex:0 0 9.5em;display:flex;overflow:hidden}
@@ -914,7 +919,7 @@ function vAtlete(){
       <button type="button" class="btn small" data-act="nomiDiversi" data-k="${esc(k)}">No, persone diverse</button></span></div>`}).join('')+`</div>`;
 
   const squadre=D.perServire;
-  if(!squadre.length)return html+`<div class="list"><p class="empty">Non c'è ancora nessuna squadra. Per iniziare aggiungere una squadra, oppure caricarle da un foglio Excel (Impostazioni &rarr; Riempire da Excel).</p></div>`;
+  if(!squadre.length)return html+`<div class="list"><p class="empty">Non c'è ancora nessuna squadra. Per iniziare aggiungere una squadra, oppure caricarle da un foglio Excel (Impostazioni &rarr; Fogli Excel).</p></div>`;
 
   const lotti=lottiSceglibili();
   const dentroA={};
@@ -1462,7 +1467,7 @@ function vMateriale(){
       h+=`</div>`;
     }
   }
-  if(!fam.length)return `<div class="list"><p class="empty">Non c'è ancora nessun articolo. Per iniziare aggiungere un articolo, oppure caricarli da un foglio Excel (Impostazioni &rarr; Riempire da Excel).</p></div>`;
+  if(!fam.length)return `<div class="list"><p class="empty">Non c'è ancora nessun articolo. Per iniziare aggiungere un articolo, oppure caricarli da un foglio Excel (Impostazioni &rarr; Fogli Excel).</p></div>`;
   return h;
 }
 
@@ -1568,7 +1573,7 @@ function vManuale(){
     <p><b>Assegnazioni</b> — due schede. <i>Richieste</i>: le richieste aperte, raggruppate per squadra, con il capo proposto dal programma e i filtri per squadra, esito, articolo e numero. <i>Da ordinare</i>: i pezzi da ordinare al fornitore, per articolo e taglia, al netto di quelli già ordinati.</p>
     <p><b>Magazzino</b> — due schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo. <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − mancanti + ordinati). Selezionando una riga si apre la finestra del carico: <b>Registra arrivo</b> aggiunge i pezzi arrivati e li scala dagli ordinati, <b>Correggi giacenza</b> sostituisce la giacenza dopo un inventario, e si indica la quantità ordinata. Eventuali incongruenze sono segnalate in cima alla scheda.</p>
     <p><b>Movimenti</b> — il registro di consegne, rientri, carichi e rettifiche, dal più recente; vengono mostrati gli ultimi 150, con il pulsante per visualizzarli tutti. <b>Registra movimento</b> inserisce un movimento manuale di materiale.</p>
-    <p><b>Impostazioni</b> — stagione in corso, nome e stemma della società, caricamento da Excel, esportazione in CSV (atleti, divise, materiale, assegnazioni, movimenti), codici degli articoli, aspetto (chiaro, scuro o come il computer), aggiornamenti e copie di sicurezza. Le funzioni che lavorano con i file sono disponibili nel programma installato.</p>`)}
+    <p><b>Impostazioni</b> — stagione in corso, nome e stemma della società, fogli Excel (scaricare e caricare i dati, scaricare i movimenti), codici degli articoli, aspetto (chiaro, scuro o come il computer), aggiornamenti e copie di sicurezza. Le funzioni che lavorano con i file sono disponibili nel programma installato.</p>`)}
 
   ${sezione('La regola dei numeri',`
     <p>All'interno di una squadra <b>un numero di maglia non può ripetersi</b>. Tra squadre diverse lo stesso numero è invece ammesso.</p>
@@ -1597,11 +1602,12 @@ function vManuale(){
     <p>Dalla scheda dell'atleta, <b>Modifica atleta</b> → <b>Elimina</b>. Se l'atleta non ha materiale, viene cancellato dopo la conferma.</p>
     <p>Se ha ancora materiale, si apre l'elenco dei capi in suo possesso: si selezionano quelli restituiti, che rientrano in magazzino. Finché manca qualcosa l'atleta resta nell'archivio contrassegnato <b>in uscita</b>; alla restituzione dell'ultimo capo, anche se registrata dalla sua scheda, il programma propone la cancellazione. Il suo nome rimane comunque nel registro dei movimenti.</p>`)}
 
-  ${sezione('Caricamento da Excel',`
-    <p>In <b>Impostazioni → Riempire da Excel</b>.</p>
+  ${sezione('Fogli Excel',`
+    <p>In <b>Impostazioni → Fogli Excel</b> si trovano tutti i file che il programma scarica e carica: il modulo di distribuzione, i quattro fogli dei dati e il registro dei movimenti. L'unico altro file è la <b>lista di squadra</b>, sulla riga di ogni squadra.</p>
     <p>Il <b>modulo di distribuzione</b> è destinato ai dirigenti: contiene un foglio per squadra con gli atleti già inseriti e gli articoli della stagione in corso. Per ogni articolo con taglie sono previste tre colonne: la risposta (<i>ce l'ho</i>, <i>mi manca</i>, <i>da cambiare</i>; la casella vuota equivale a <i>ce l'ho</i>), la <i>taglia</i> attuale e la <i>taglia richiesta</i>, da compilare solo se diversa; gli articoli senza taglie hanno la sola risposta. La colonna <i>Numero maglia</i> riporta il numero attuale; la colonna <i>Note</i> è libera. Al caricamento vengono creati squadre, atleti e richieste; un foglio copiato dentro Excel viene ricondotto alla sua squadra, e un foglio che non corrisponde a nessuna squadra viene segnalato prima di crearne una nuova.</p>
-    <p>Gli altri quattro fogli servono al caricamento iniziale e vanno caricati in quest'ordine: <b>Articoli e magazzino</b>, <b>Squadre e atleti</b>, <b>Divise da gara</b>, <b>Richieste</b>. Vengono scaricati già compilati con i dati presenti nel programma e possono quindi servire anche come verifica. Le colonne sono riconosciute dal titolo: un foglio con colonne mancanti viene rifiutato.</p>
-    <p>Le taglie devono corrispondere a quelle previste per l'articolo; negli articoli delle richieste si può indicare il nome, il codice o il nome visualizzato. Il caricamento ripetuto dello stesso file non crea duplicati e non ricrea le richieste già consegnate; i dati già presenti non vengono modificati. Le righe che non è stato possibile caricare sono elencate in Impostazioni.</p>`)}
+    <p>Gli altri quattro fogli servono al caricamento iniziale e vanno caricati in quest'ordine: <b>Articoli e magazzino</b>, <b>Squadre e atleti</b>, <b>Divise da gara</b>, <b>Richieste</b>. Vengono scaricati già compilati con i dati presenti nel programma, con in fondo alcune colonne solo informative (per esempio consegnati, prenotati e magazzino finale per gli articoli, esito e numero proposto per le richieste), che al caricamento vengono ignorate. Il foglio <b>Movimenti</b> si scarica soltanto. Le colonne sono riconosciute dal titolo: un foglio con colonne mancanti o ripetute viene rifiutato.</p>
+    <p>Le taglie devono corrispondere a quelle previste per l'articolo; negli articoli delle richieste si può indicare il nome, il codice o il nome visualizzato. Il caricamento aggiunge soltanto: i dati già presenti non vengono modificati, il caricamento ripetuto dello stesso file non crea duplicati e non ricrea le richieste già consegnate.</p>
+    <p>Prima di caricare, il programma controlla ogni riga e mostra un riepilogo: cosa verrà aggiunto, cosa verrà ignorato perché già presente, le squadre e i lotti nuovi e le righe con errori, che non vengono caricate (per esempio un valore non ammesso, una taglia che Excel ha trasformato in data, un numero di maglia fuori dall'intervallo 0–99, un atleta o un articolo inesistente). Segnala inoltre, come avvisi, le situazioni da verificare: righe ripetute, giacenze diverse da quelle nel programma, numeri di maglia già in uso nella squadra, note che sembrano contenere recapiti (che non vengono caricate). Errori e avvisi dell'ultimo caricamento restano elencati in Impostazioni.</p>`)}
 
   ${sezione('Lista di squadra',`
     <p>In <b>Squadre</b>, sulla riga di ogni squadra, il pulsante <b>Scarica lista</b> produce un file Excel con gli articoli da ritirare e da consegnare a ciascun atleta, lo stato di ogni capo e una colonna per la firma. Le consegne effettuate vanno poi registrate nel programma. La funzione è disponibile nel programma installato.</p>`)}
@@ -1763,15 +1769,11 @@ function dlgTuttaSquadra(nome){
 /* ---- Impostazioni ---- */
 function vImpostazioni(){
   const D=derive();
-  let h=`<h1>Impostazioni</h1>`+legenda(`<p>Le impostazioni valgono per tutto l'archivio: stagione in corso, nome e stemma della società, caricamento dai fogli Excel, esportazioni, codici degli articoli, aspetto, aggiornamenti e copie di sicurezza. Ogni sezione riporta sotto il titolo che cosa fa.</p>`)+`
+  let h=`<h1>Impostazioni</h1>`+legenda(`<p>Le impostazioni valgono per tutto l'archivio: stagione in corso, nome e stemma della società, fogli Excel da scaricare e caricare, codici degli articoli, aspetto, aggiornamenti e copie di sicurezza. Ogni sezione riporta sotto il titolo che cosa fa.</p>`)+`
   <h2>Stagione</h2><div class="filters corti"><input type="text" id="stag" value="${esc(D.set.stagione)}" aria-label="Stagione"><button type="button" class="btn" data-act="saveStag">Salva stagione</button></div>
   <h2>Società</h2><p class="sub">Il nome e lo stemma compaiono in alto, accanto a «Magazzino», e il nome anche nel titolo della finestra. Sono salvati nell’archivio: il programma non appartiene a una società in particolare.</p>
   <div class="filters corti"><input type="text" id="soc" value="${esc(D.set.societa||'')}" placeholder="Nome della società" aria-label="Nome della società"><button type="button" class="btn" data-act="saveSoc">Salva nome</button></div>
   <div class="row-actions" style="margin-top:8px"><button type="button" class="btn" data-act="scegliLogo">${D.set.logo?'Cambia stemma…':'Carica lo stemma…'}</button>${D.set.logo?`<button type="button" class="btn ghost" data-act="togliLogo">Togli lo stemma</button>`:''}</div>
-  <h2>Esporta</h2><p class="sub">File CSV apribili in Excel, utili come copia di sicurezza o per stampare le liste.</p><div class="row-actions">
-  <button type="button" class="btn" data-act="exp" data-v="atlete">Atleti e divise</button><button type="button" class="btn" data-act="exp" data-v="divise">Magazzino divise</button>
-  <button type="button" class="btn" data-act="exp" data-v="materiale">Magazzino materiale</button><button type="button" class="btn" data-act="exp" data-v="assegnazioni">Assegnazioni</button>
-  <button type="button" class="btn" data-act="exp" data-v="movimenti">Movimenti</button></div>
   ${window.__PROVA?`<h2>Versione di prova</h2><p class="sub">Questa copia salva i dati solo nel browser di questo computer. Il ripristino cancella le prove e torna ai dati iniziali.</p><div class="row-actions"><button type="button" class="btn danger" data-act="resetProva">Ripristina dati iniziali</button></div>`:''}
   ${window.__APP?sezioneExcel():''}
   ${window.__APP?sezioneAggiornamenti():''}
@@ -2723,7 +2725,8 @@ document.addEventListener('click',async e=>{
       const ok=await w(()=>S.db.doc('settings/main').update({squadre:[...D.set.squadre,{nome:n,includi:true}]}));if(ok)toast('Squadra aggiunta');return ok});
     case'newArticolo':return dlgArticolo(null);
     case'modArticolo':return dlgArticolo(Number(el.dataset.i));
-    case'exp':return esporta(el.dataset.v);
+    case'scaricaMov':return scaricaMovimenti();
+    case'rivediEsito':return finestraEsitoExcel();
     case'salvaCopia':return window.__APP.esporta().then(d=>{if(d){toast('Copia salvata');chiediInfoCopie(true)}}).catch(e=>toast('Salvataggio della copia non riuscito: '+e));
     case'riprendiCopia':{
       if(!await chiedi('Sostituire tutti i dati con quelli della copia?\nI dati attuali vengono prima salvati in una copia nella cartella delle copie di sicurezza.'))return;
@@ -2820,12 +2823,32 @@ function indiceAtleti(){
    nell'ordine in cui compaiono: senza numero finivano in ordine alfabetico. */
 function prossimoOrdine(squadre){return squadre.reduce((m,x)=>Math.max(m,Number(x.ordine)||0),0)+1}
 
+/* ---- controlli comuni ai fogli ---- */
+/* Il risultato di un caricamento, di prova o vero. "problemi" sono gli
+   errori (la riga non viene caricata), "avvisi" le righe caricate che
+   conviene verificare. */
+function nuovoEsito(){return {creati:0,aggiornati:0,saltati:0,problemi:[],avvisi:[],squadreNuove:[],lottiNuovi:[]}}
+const SI=v=>/^(s|si|x|1|vero|yes)$/.test(norm(v).trim());
+const NO=v=>/^(n|no|0|falso)$/.test(norm(v).trim());
+const siNoValido=v=>!String(v??'').trim()||SI(v)||NO(v);
+// Excel trasforma "5-6" in una data: una taglia cosi' non e' una taglia.
+const sembraData=t=>/^\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4}$/.test(String(t).trim())||/^\d{4}-\d{2}-\d{2}/.test(String(t).trim());
+// Una nota non e' il posto per mail e telefoni: sono dati di minorenni.
+const sembraRecapito=t=>/@|\+39|\b3\d{2}[\s.]?\d{6,7}\b/.test(String(t||''));
+/* Il numero di maglia scritto in una casella: null se vuota, NaN se non e'
+   un intero da 0 a 99. */
+const numeroMaglia=v=>{const t=String(v??'').trim();if(t==='')return null;const n=Number(t);return Number.isInteger(n)&&n>=0&&n<=99?n:NaN};
+const riga0=i=>`riga ${i+2}`;
+const quali=(arr,n)=>arr.filter(Boolean).join(n||', ');
+
 const MODELLI_EXCEL={
  articoli:{
   nome:'Articoli e magazzino',
   foglio:'Articoli',
   colonne:['Articolo','Ha un numero','Taglia','Quantità','Codice','Stagione'],
+  info:['Codice taglia','Nome visualizzato','Consegnati','Prenotati','Ordinati','Magazzino finale'],
   obbligatorie:['Articolo','Taglia'],
+  voci:{creati:['articolo nuovo','articoli nuovi'],aggiornati:['riga di magazzino nuova','righe di magazzino nuove']},
   istruzioni:[
    'ARTICOLI E MAGAZZINO — da caricare per primo.',
    '',
@@ -2835,54 +2858,85 @@ const MODELLI_EXCEL={
    'Ha un numero  sì solo per le divise da gara, che hanno il numero stampato;',
    '              per tutto il resto vuoto oppure no.',
    'Taglia        XS, S, M, L... oppure UNICA per borsoni, sacche e borracce.',
-   'Quantità      quanti pezzi ci sono adesso in magazzino. Le divise con il numero',
-   '              non si contano qui: quelle si caricano col foglio Divise.',
+   '              Le taglie come 5-6 vanno scritte come testo, altrimenti Excel',
+   '              le trasforma in una data.',
+   'Quantità      quanti pezzi ci sono adesso in magazzino (numero intero). Le divise',
+   '              con il numero non si contano qui: si caricano con il foglio Divise.',
    'Codice        facoltativo: il codice corto (A001). Se manca lo assegna il programma.',
    'Stagione      facoltativo: la stagione dell\'articolo, per esempio 2026/27.',
    '',
-   'Se un articolo esiste già viene lasciato com\'è: questo foglio aggiunge soltanto,',
-   'non modifica né cancella. Codice e stagione vengono scritti solo se mancano.'],
+   'Le colonne Codice taglia, Nome visualizzato, Consegnati, Prenotati, Ordinati e',
+   'Magazzino finale sono solo informative: al caricamento vengono ignorate.',
+   '',
+   'Il caricamento aggiunge soltanto: un articolo o una giacenza già presenti non',
+   'vengono modificati. Per correggere una giacenza si usa «Correggi giacenza» in',
+   'Magazzino. Prima di caricare il programma mostra cosa verrà aggiunto e quali',
+   'righe contengono errori.'],
   righe(){const D=derive();const out=[];
-   for(const a of (D.set.articoli||[])){
+   const mancano={};for(const [rid,pp] of Object.entries(D.prop)){if(pp.esito!=='MANCA')continue;const r=S.richieste[rid];if(!r||D.conNumero(r.articolo))continue;const k=D.key(r.articolo,r.taglia);mancano[k]=(mancano[k]||0)+1}
+   for(const a of [...(D.set.articoli||[])].sort(perNome)){
     const tg=(a.taglie||[]).length?a.taglie:['UNICA'];
-    for(const t of tg){const st=D.stock[D.key(a.nome,t)];
-     out.push([a.nome,a.conNumero?'sì':'no',t,a.conNumero?'':String(st?st.ora:0),a.codice||'',a.stagione||''])}}
+    for(const t of tg){const k=D.key(a.nome,t);const st=D.stock[k]||{ora:0,consegne:0,rientri:0,ordinati:0};
+     const fuori=Math.max(0,(st.consegne||0)-(st.rientri||0));const p=D.prenMat[k]||0;const ord=st.ordinati||0;
+     out.push([a.nome,a.conNumero?'sì':'no',t,a.conNumero?'':String(st.ora||0),a.codice||'',a.stagione||'',
+      artCodiceTaglia(a.nome,t),artLabel(a.nome),a.conNumero?'':String(fuori),a.conNumero?'':String(p),a.conNumero?'':String(ord),
+      a.conNumero?'':String((st.ora||0)-p-(mancano[k]||0)+ord)])}}
    return out},
-  async applica(righe){
-   const D=derive();const r={creati:0,aggiornati:0,saltati:0,problemi:[]};
+  async applica(righe,prova,nr=riga0){
+   const D=derive();const r=nuovoEsito();
    // Copie, non gli oggetti delle impostazioni: si scrive tutto alla fine.
    const art=new Map((D.set.articoli||[]).map(a=>[KEY(a.nome),{...a,taglie:[...(a.taglie||[])]}]));
-   let cambiato=false;
+   const esistenti=new Set(art.keys());
+   let cambiato=false;const visti=new Set();
    const kt=x=>norm(String(x)).replace(/\s+/g,'');
-   for(const riga of righe){
+   for(const [i,riga] of righe.entries()){
+    const q=nr(i);
     const nome=COL(riga,0).toUpperCase();
-    if(!nome){r.saltati++;continue}
-    const conNum=/^s/i.test(norm(COL(riga,1)));
+    if(!nome){if(riga.some(c=>String(c??'').trim()))r.problemi.push(`${q}: manca il nome dell'articolo`);else r.saltati++;continue}
+    if(!siNoValido(COL(riga,1))){r.problemi.push(`${q}: «Ha un numero» vale "${COL(riga,1)}"; valori ammessi: sì, no oppure vuoto`);continue}
+    const conNum=SI(COL(riga,1));
+    const scritta=normTaglia(COL(riga,2)||'UNICA');
+    if(sembraData(scritta)){r.problemi.push(`${q}: la taglia "${scritta}" sembra una data (Excel trasforma per esempio 5-6 in una data): va scritta come testo`);continue}
+    if(scritta.length>20){r.problemi.push(`${q}: la taglia "${scritta}" è troppo lunga`);continue}
+    const qs=COL(riga,3);const qn=qs===''?0:Number(qs.replace(',','.'));
+    if(!Number.isInteger(qn)||qn<0){r.problemi.push(`${q}: quantità "${qs}" non valida: serve un numero intero, zero o più`);continue}
+    const cod=COL(riga,4).toUpperCase(),stag=COL(riga,5);
+    if(cod&&!/^[A-Z0-9_-]{1,12}$/.test(cod)){r.problemi.push(`${q}: codice "${cod}" non valido: solo lettere e cifre, al massimo 12 caratteri`);continue}
+    if(stag&&!/^\d{4}\/\d{2}$/.test(stag))r.avvisi.push(`${q}: stagione "${stag}" non nel formato 2026/27`);
+    const kr=KEY(nome)+'|'+kt(scritta);
+    if(visti.has(kr)){r.avvisi.push(`${q}: ${nome} ${scritta} compare più volte nel foglio: riga ignorata`);r.saltati++;continue}
+    visti.add(kr);
     let a=art.get(KEY(nome));
     if(!a){a={nome,conNumero:conNum,taglie:[]};art.set(KEY(nome),a);r.creati++;cambiato=true}
+    else if(esistenti.has(KEY(nome))&&!!a.conNumero!==conNum&&COL(riga,1))
+      r.avvisi.push(`${q}: ${nome} nel programma ${a.conNumero?'ha':'non ha'} il numero stampato: impostazione non modificata`);
     // La taglia com'e' gia' scritta sull'articolo, se c'e': "5-6 ANNI" e "5-6
     // anni" sono la stessa taglia.
-    const scritta=normTaglia(COL(riga,2)||'UNICA');
     let taglia=a.taglie.find(x=>kt(x)===kt(scritta));
-    if(!taglia){taglia=scritta;a.taglie.push(taglia);cambiato=true}
-    const cod=COL(riga,4).toUpperCase(),stag=COL(riga,5);
-    if(cod&&!a.codice&&![...art.values()].some(x=>x!==a&&String(x.codice||'').toUpperCase()===cod)){a.codice=cod;cambiato=true}
+    if(!taglia){taglia=scritta;a.taglie.push(taglia);cambiato=true;
+      if(esistenti.has(KEY(nome)))r.avvisi.push(`${q}: ${nome}: taglia nuova ${scritta}, verrà aggiunta all'articolo`)}
+    if(cod){const altro=[...art.values()].find(x=>x!==a&&String(x.codice||'').toUpperCase()===cod);
+      if(altro)r.avvisi.push(`${q}: il codice ${cod} è già dell'articolo ${altro.nome}: non assegnato a ${nome}`);
+      else if(a.codice&&String(a.codice).toUpperCase()!==cod)r.avvisi.push(`${q}: ${nome} ha già il codice ${a.codice}: non modificato`);
+      else if(!a.codice){a.codice=cod;cambiato=true}}
     if(stag&&!a.stagione){a.stagione=stag;cambiato=true}
-    if(a.conNumero)continue; // le divise con numero stanno nel loro foglio
+    if(a.conNumero){if(qn>0)r.avvisi.push(`${q}: ${nome} ha il numero stampato: le quantità si caricano con il foglio Divise`);continue}
     const esiste=Object.values(S.materiale).some(m=>KEY(m.articolo)===KEY(a.nome)&&kt(m.taglia)===kt(taglia));
-    if(esiste){r.saltati++;continue}
-    const q=Number(COL(riga,3)||0);
-    if(!Number.isFinite(q)||q<0){r.problemi.push(`${nome} ${taglia}: quantità non valida`);continue}
-    await S.db.collection('materiale').add({articolo:a.nome,taglia,iniziale:q,precedente:false});
+    if(esiste){const ora=(D.stock[D.key(a.nome,taglia)]||{ora:0}).ora;
+      if(qs!==''&&qn!==ora)r.avvisi.push(`${q}: ${nome} ${taglia}: nel foglio ${qn}, nel programma ${ora}. La giacenza non viene modificata: per correggerla si usa «Correggi giacenza» in Magazzino`);
+      r.saltati++;continue}
+    if(!prova)await S.db.collection('materiale').add({articolo:a.nome,taglia,iniziale:qn,precedente:false});
     r.aggiornati++}
-   if(cambiato)await S.db.doc('settings/main').update({articoli:[...art.values()]});
+   if(cambiato&&!prova)await S.db.doc('settings/main').update({articoli:[...art.values()]});
    return r}},
 
  atlete:{
   nome:'Squadre e atleti',
   foglio:'Atleti',
   colonne:['Squadra','Cognome','Nome','Note','Attivo'],
+  info:['Divise','In uscita','Gioca anche in'],
   obbligatorie:['Squadra','Cognome','Nome'],
+  voci:{creati:['atleta nuovo','atleti nuovi']},
   istruzioni:[
    'SQUADRE E ATLETI — da caricare dopo gli articoli.',
    '',
@@ -2895,54 +2949,73 @@ const MODELLI_EXCEL={
    'Note      facoltativo',
    'Attivo    facoltativo: no per un atleta non attivo in questa stagione.',
    '',
-   'Un atleta già presente nella stessa squadra viene saltato: il caricamento',
+   'Le colonne Divise, In uscita e Gioca anche in sono solo informative: al',
+   'caricamento vengono ignorate.',
+   '',
+   'Un atleta già presente nella stessa squadra viene ignorato: il caricamento',
    'ripetuto dello stesso foglio non crea doppioni e non modifica i dati esistenti.',
    '',
    'Non inserire indirizzi email, numeri di telefono o date delle visite mediche:',
-   'il programma non li utilizza e si tratta di dati di atleti spesso minorenni.'],
+   'il programma non li utilizza e si tratta di dati di atleti spesso minorenni.',
+   'Una nota che sembra contenere un recapito non viene caricata.'],
   righe(){const D=derive();
-   return Object.values(S.atlete)
-    .sort((a,b)=>(D.teamIdx[a.squadra]??99)-(D.teamIdx[b.squadra]??99)||norm(a.cognome).localeCompare(norm(b.cognome)))
-    .map(a=>[a.squadra,a.cognome,a.nome,a.note||'',a.attiva===false?'no':''])},
-  async applica(righe){
-   const D=derive();const r={creati:0,aggiornati:0,saltati:0,problemi:[]};
+   return Object.entries(S.atlete)
+    .sort((a,b)=>(D.teamIdx[a[1].squadra]??99)-(D.teamIdx[b[1].squadra]??99)||norm(a[1].cognome).localeCompare(norm(b[1].cognome)))
+    .map(([id,a])=>[a.squadra,a.cognome,a.nome,a.note||'',a.attiva===false?'no':'',
+      (D.perAtleta[id]||[]).map(x=>{const d=S.divise[x];return`${d.taglia} n.${d.numero}${(d.modello||'STANDARD')!=='STANDARD'?' '+d.modello.toLowerCase():''}${d.daRestituire?' (da cambiare)':''}`}).join(', '),
+      a.inUscita?'sì':'',ancheIn(id).join(', ')])},
+  async applica(righe,prova,nr=riga0){
+   const D=derive();const r=nuovoEsito();
    const squadre=[...(D.set.squadre||[])];
    const viste=new Set(squadre.map(x=>KEY(x.nome)));
-   const gia=new Set(Object.values(S.atlete).map(a=>KEY(a.squadra+'|'+a.cognome+'|'+a.nome)));
-   for(const riga of righe){
+   const gia=new Map(Object.values(S.atlete).map(a=>[KEY(a.squadra+'|'+a.cognome+'|'+a.nome),a]));
+   const visti=new Set();let sqScritte=false;
+   for(const [i,riga] of righe.entries()){
+    const q=nr(i);
     const sq=COL(riga,0).toUpperCase();const cog=COL(riga,1);const nom=COL(riga,2);
-    if(!sq||!cog||!nom){if(sq||cog||nom)r.problemi.push(`riga incompleta: ${[sq,cog,nom].filter(Boolean).join(' ')||'vuota'}`);else r.saltati++;continue}
-    if(!viste.has(KEY(sq))){squadre.push({nome:sq,includi:true,modelloDivisa:'STANDARD',ordine:prossimoOrdine(squadre)});viste.add(KEY(sq))}
+    if(!sq||!cog||!nom){if(sq||cog||nom)r.problemi.push(`${q}: ${quali([!sq&&'la squadra',!cog&&'il cognome',!nom&&'il nome'])} ${[!sq,!cog,!nom].filter(Boolean).length===1?'manca':'mancano'}`);else r.saltati++;continue}
+    if(!siNoValido(COL(riga,4))){r.problemi.push(`${q}: «Attivo» vale "${COL(riga,4)}"; valori ammessi: sì, no oppure vuoto`);continue}
+    if(/[0-9@#]/.test(cog+nom))r.avvisi.push(`${q}: ${cog} ${nom}: il nome contiene cifre o simboli, da verificare`);
+    let nota=COL(riga,3);
+    if(sembraRecapito(nota)){r.avvisi.push(`${q}: ${cog} ${nom}: la nota sembra contenere un recapito e non viene caricata (il programma non conserva dati personali)`);nota=''}
     const k=KEY(sq+'|'+cog+'|'+nom);
-    if(gia.has(k)){r.saltati++;continue}
-    gia.add(k);
-    // Le squadre prima degli atleti: se il caricamento si interrompe a meta',
-    // gli atleti gia' scritti hanno comunque la loro squadra.
-    if(squadre.length!==(D.set.squadre||[]).length&&!r._sqScritte){await S.db.doc('settings/main').update({squadre});r._sqScritte=squadre.length}
-    await S.db.collection('atlete').add({squadra:sq,cognome:cog,nome:nom,attiva:!/^n/i.test(COL(riga,4)),note:COL(riga,3)});
+    if(visti.has(k)){r.avvisi.push(`${q}: ${cog} ${nom} (${sq}) compare più volte nel foglio: riga ignorata`);r.saltati++;continue}
+    visti.add(k);
+    const esiste=gia.get(k);
+    if(esiste){if(COL(riga,4)&&(esiste.attiva===false)!==NO(COL(riga,4)))r.avvisi.push(`${q}: ${cog} ${nom}: nel foglio lo stato attivo è diverso da quello nel programma; non modificato`);
+      r.saltati++;continue}
+    const altrove=Object.values(S.atlete).filter(a=>KEY(a.cognome+'|'+a.nome)===KEY(cog+'|'+nom)&&KEY(a.squadra)!==KEY(sq));
+    if(altrove.length)r.avvisi.push(`${q}: ${cog} ${nom} è già in ${altrove.map(a=>teamLabel(a.squadra)).join(', ')}: viene creata una seconda scheda (atleta in due squadre?)`);
+    if(!viste.has(KEY(sq))){squadre.push({nome:sq,includi:true,modelloDivisa:'STANDARD',ordine:prossimoOrdine(squadre)});viste.add(KEY(sq));r.squadreNuove.push(sq)}
+    if(!prova){
+      // Le squadre prima degli atleti: se il caricamento si interrompe a meta',
+      // gli atleti gia' scritti hanno comunque la loro squadra.
+      if(r.squadreNuove.length&&!sqScritte){await S.db.doc('settings/main').update({squadre});sqScritte=true}
+      await S.db.collection('atlete').add({squadra:sq,cognome:cog,nome:nom,attiva:!NO(COL(riga,4)),note:nota});
+    }
     r.creati++}
-   if(squadre.length!==(r._sqScritte||(D.set.squadre||[]).length))
-    await S.db.doc('settings/main').update({squadre});
-   delete r._sqScritte;
+   if(!prova&&r.squadreNuove.length)await S.db.doc('settings/main').update({squadre});
    return r}},
 
  divise:{
   nome:'Divise da gara',
   foglio:'Divise',
   colonne:['Modello','Taglia','Numero','Squadra','Cognome','Nome','Da cambiare','Note'],
+  info:['Stato','Prenotata per'],
   obbligatorie:['Taglia','Numero'],
+  voci:{creati:['divisa nuova','divise nuove']},
   istruzioni:[
    'DIVISE DA GARA — da caricare dopo gli atleti.',
    '',
    'Una riga per ogni capo fisico. Due divise con lo stesso numero ma taglia',
-   'diversa sono due capi diversi, ed e\' normale averle entrambe.',
+   'diversa sono due capi diversi, ed è normale averle entrambe.',
    '',
-   'Modello       STANDARD per le divise normali. LIBERO per le maglie da libero,',
-   '              che valgono per tutte le squadre. Altri nomi creano altri lotti',
-   '              (per esempio PRIMA SQUADRA): poi, nella schermata Squadre, si',
+   'Modello       il lotto: STANDARD per le divise normali, LIBERO per le maglie',
+   '              da libero, comuni a tutte le squadre. Altri nomi creano altri',
+   '              lotti (per esempio PRIMA SQUADRA): nella schermata Squadre si',
    '              indica sulla riga di ogni squadra quale lotto utilizza.',
-   'Taglia        XS, S, M, L, XL, XXL',
-   'Numero        il numero stampato sulla maglia',
+   'Taglia        XXS, XS, S, M, L, XL, XXL',
+   'Numero        il numero stampato sulla maglia, da 0 a 99',
    'Squadra       vuoto se la divisa è in magazzino. Se è assegnata a un atleta,',
    'Cognome       indicarne squadra, cognome e nome: deve essere un atleta',
    'Nome          già caricato con il foglio Atleti.',
@@ -2950,95 +3023,145 @@ const MODELLI_EXCEL={
    '              squadra): il numero resta libero per la sua squadra.',
    'Note          facoltativo',
    '',
-   'Due maglie con lo stesso modello, taglia e numero in mano a due atleti di',
-   'squadre diverse sono due capi distinti, ed è normale: la regola dice che lo',
-   'stesso numero non si ripete dentro la stessa squadra, fra squadre sì.'],
-  righe(){return Object.values(S.divise).filter(d=>!d.dismessa)
-   .sort((a,b)=>(a.modello||'').localeCompare(b.modello||'')||szIdx(a.taglia)-szIdx(b.taglia)||a.numero-b.numero)
-   .map(d=>{const a=d.holder?S.atlete[d.holder]:null;
+   'Le colonne Stato e Prenotata per sono solo informative: al caricamento',
+   'vengono ignorate.',
+   '',
+   'All\'interno di una squadra un numero non si ripete: una divisa con un numero',
+   'già in uso nella squadra dell\'atleta viene caricata e segnalata come numero doppio.'],
+  righe(){const D=derive();
+   return Object.entries(S.divise).filter(([,d])=>!d.dismessa)
+   .sort((a,b)=>(a[1].modello||'').localeCompare(b[1].modello||'')||szIdx(a[1].taglia)-szIdx(b[1].taglia)||a[1].numero-b[1].numero)
+   .map(([id,d])=>{const a=d.holder?S.atlete[d.holder]:null;const pr=D.prenDivisa[id];
     return [d.modello||'STANDARD',d.taglia,String(d.numero),a?a.squadra:'',a?a.cognome:'',a?a.nome:'',
-     d.daRestituire?'sì':'',d.note||'']})},
-  async applica(righe){
-   const D=derive();const r={creati:0,aggiornati:0,saltati:0,problemi:[]};
+     d.daRestituire?'sì':'',d.note||'',
+     !d.holder?'in magazzino':d.daRestituire?'da cambiare':'in uso',pr&&S.richieste[pr]?fullName(S.atlete[S.richieste[pr].atletaId]):'']})},
+  async applica(righe,prova,nr=riga0){
+   const D=derive();const r=nuovoEsito();
    const modelli=[...(D.set.modelli||['STANDARD'])];
    const perNome=indiceAtleti();
    // Il capo si riconosce da modello, taglia, numero **e da chi lo tiene**: due
    // liberi di squadre diverse possono portare lo stesso numero, ed e' normale.
    const chiave=(m,t,n,h)=>`${m}|${t}|${n}|${h||''}`;
    const gia=new Set(Object.values(S.divise).filter(d=>!d.dismessa).map(d=>chiave(d.modello||'STANDARD',KEY(d.taglia),Number(d.numero),d.holder)));
-   for(const riga of righe){
+   // I numeri in uso in ogni squadra, compresi quelli caricati da questo foglio.
+   const inUso={};
+   for(const d of Object.values(S.divise)){if(d.dismessa||!d.holder||d.daRestituire)continue;const a=S.atlete[d.holder];if(!a)continue;
+     (inUso[a.squadra]=inUso[a.squadra]||new Map()).set(Number(d.numero),d.holder)}
+   const visti=new Set();
+   for(const [i,riga] of righe.entries()){
+    const q=nr(i);
     const mod=(COL(riga,0)||'STANDARD').toUpperCase();const tg=normTaglia(COL(riga,1));
+    if(!tg){r.problemi.push(`${q}: manca la taglia`);continue}
+    if(sembraData(tg)){r.problemi.push(`${q}: la taglia "${tg}" sembra una data: va scritta come testo`);continue}
     // Una casella vuota non e' il numero 0.
-    const num=COL(riga,2)===''?NaN:Number(COL(riga,2));
-    if(!tg||!Number.isInteger(num)||num<0){r.problemi.push(`riga senza taglia o numero valido: ${riga.join(' ')}`);continue}
+    const num=numeroMaglia(COL(riga,2));
+    if(num===null){r.problemi.push(`${q}: manca il numero`);continue}
+    if(Number.isNaN(num)){r.problemi.push(`${q}: numero "${COL(riga,2)}" non valido: serve un numero intero da 0 a 99`);continue}
+    if(!siNoValido(COL(riga,6))){r.problemi.push(`${q}: «Da cambiare» vale "${COL(riga,6)}"; valori ammessi: sì, no oppure vuoto`);continue}
+    if(!SZ.includes(tg))r.avvisi.push(`${q}: taglia ${tg} non fra quelle consuete (${SZ.join(', ')})`);
     const sq=COL(riga,3).toUpperCase();const cog=COL(riga,4);const nom=COL(riga,5);
     let holder=null;
     if(sq||cog||nom){
+     if(!sq||!cog||!nom){r.problemi.push(`${q}: per assegnare la divisa servono squadra, cognome e nome dell'atleta`);continue}
      holder=perNome.get(KEY(sq+'|'+cog+'|'+nom))||null;
-     if(holder===OMONIMI){r.problemi.push(`${cap(mod)} ${tg} n.${num}: in ${sq} ci sono due atleti di nome ${cog} ${nom}; la divisa va assegnata a mano.`);continue}
-     if(!holder){r.problemi.push(`${cap(mod)} ${tg} n.${num}: nessun atleta ${cog} ${nom} in ${sq}. La divisa non è stata caricata.`);continue}}
+     if(holder===OMONIMI){r.problemi.push(`${q}: in ${sq} ci sono due atleti di nome ${cog} ${nom}: la divisa va assegnata a mano`);continue}
+     if(!holder){r.problemi.push(`${q}: nessun atleta ${cog} ${nom} in ${sq}: la divisa non viene caricata`);continue}
+     const at=S.atlete[holder];
+     if(at.inUscita||at.attiva===false)r.avvisi.push(`${q}: ${cog} ${nom} è ${at.inUscita?'in uscita':'non attivo'}`)}
     const k=chiave(mod,KEY(tg),num,holder);
+    if(visti.has(k)){r.avvisi.push(`${q}: la ${tg} n.${num} ${cap(mod)} compare più volte nel foglio: riga ignorata`);r.saltati++;continue}
+    visti.add(k);
     if(gia.has(k)){r.saltati++;continue}
-    gia.add(k);
-    if(!modelli.includes(mod))modelli.push(mod);
-    await S.db.collection('divise').add({taglia:tg,numero:num,modello:mod,holder,
-     daRestituire:/^s/i.test(norm(COL(riga,6))),note:COL(riga,7)});
+    const daCambiare=SI(COL(riga,6));
+    if(holder&&!daCambiare&&!D.comuni.has(mod)){const sqA=S.atlete[holder].squadra;const chi=inUso[sqA]&&inUso[sqA].get(num);
+      // La maglia esiste davvero: si carica, ma il numero doppio si segnala
+      // (e poi resta evidenziato in squadra finche' non si sistema).
+      if(chi&&chi!==holder)r.avvisi.push(`${q}: in ${teamLabel(sqA)} il n.${num} è già di ${fullName(S.atlete[chi])}: la divisa viene caricata, ma il numero risulterà doppio in squadra`);
+      (inUso[sqA]=inUso[sqA]||new Map()).set(num,holder)}
+    if(holder&&Object.values(S.divise).some(d=>!d.dismessa&&!d.holder&&(d.modello||'STANDARD')===mod&&KEY(d.taglia)===KEY(tg)&&Number(d.numero)===num))
+      r.avvisi.push(`${q}: una ${tg} n.${num} ${cap(mod)} risulta anche in magazzino: verificare che non sia lo stesso capo contato due volte`);
+    if(!modelli.includes(mod)){modelli.push(mod);r.lottiNuovi.push(mod)}
+    if(!prova)await S.db.collection('divise').add({taglia:tg,numero:num,modello:mod,holder,daRestituire:daCambiare,note:COL(riga,7)});
     r.creati++}
-   if(modelli.length!==(D.set.modelli||[]).length)
-    await S.db.doc('settings/main').update({modelli});
+   if(!prova&&r.lottiNuovi.length)await S.db.doc('settings/main').update({modelli});
    return r}},
 
  richieste:{
   nome:'Richieste',
   foglio:'Richieste',
   colonne:['Squadra','Cognome','Nome','Articolo','Taglia','Numero desiderato','Note','Tipo di divisa'],
+  info:['Esito','Numero proposto','Motivo'],
   obbligatorie:['Squadra','Cognome','Nome','Articolo'],
+  voci:{creati:['richiesta nuova','richieste nuove']},
   istruzioni:[
    'RICHIESTE — da caricare per ultimo.',
    '',
-   'Una riga per ogni cosa che un\'atleta deve ricevere. E\' il foglio che i',
+   'Una riga per ogni articolo che un atleta deve ricevere. È il foglio che i',
    'dirigenti di squadra possono compilare e rimandare indietro.',
    '',
    'Squadra, Cognome, Nome   devono corrispondere a un atleta già inserito.',
    'Articolo                 il nome, il codice corto (A001) o il nome come appare',
    '                         nel programma.',
    'Taglia                   una di quelle previste per l\'articolo.',
-   'Numero desiderato        solo per le divise, e solo se ne viene chiesto uno preciso.',
+   'Numero desiderato        solo per le divise e solo se ne viene chiesto uno',
+   '                         preciso, da 0 a 99.',
    'Note                     facoltativo.',
    'Tipo di divisa           facoltativo: LIBERO per una maglia da libero.',
    '',
-   'Le righe che non corrispondono a nessun atleta vengono segnalate e non',
-   'caricate. Una richiesta uguale a una già aperta viene saltata.'],
+   'Le colonne Esito, Numero proposto e Motivo sono solo informative: al',
+   'caricamento vengono ignorate.',
+   '',
+   'Le righe che non corrispondono a nessun atleta o articolo vengono segnalate e',
+   'non caricate. Una richiesta uguale a una già aperta, o di un articolo già',
+   'consegnato in questa stagione, viene ignorata.'],
   righe(){const D=derive();
-   return D.order.map(rid=>{const r=S.richieste[rid];const a=S.atlete[r.atletaId];if(!a)return null;
-    return [a.squadra,a.cognome,a.nome,r.articolo,r.taglia,r.numeroDesiderato==null?'':String(r.numeroDesiderato),r.note||'',r.modello||'']}).filter(Boolean)},
-  async applica(righe){
-   const D=derive();const r={creati:0,aggiornati:0,saltati:0,problemi:[]};
+   const sq=rid=>{const a=S.atlete[S.richieste[rid].atletaId];return a?(D.teamIdx[a.squadra]??99):999};
+   return D.order.map((rid,k)=>[rid,k]).sort((x,y)=>sq(x[0])-sq(y[0])||x[1]-y[1]).map(([rid])=>{const r=S.richieste[rid];const a=S.atlete[r.atletaId];if(!a)return null;
+    const p=D.prop[rid]||{};const d=p.divisaId?S.divise[p.divisaId]:null;
+    return [a.squadra,a.cognome,a.nome,r.articolo,r.taglia,r.numeroDesiderato==null?'':String(r.numeroDesiderato),r.note||'',r.modello||'',
+     p.esito==='OK'?'pronta':p.esito==='MANCA'?'da ordinare':'esclusa',d?String(d.numero):'',p.motivo||'']}).filter(Boolean)},
+  async applica(righe,prova,nr=riga0){
+   const D=derive();const r=nuovoEsito();
    const perNome=indiceAtleti();
    let ordine=Object.values(S.richieste).reduce((m,x)=>Math.max(m,x.ordine||0),0);
    // Una richiesta uguale a una gia' aperta non si rifa': ricaricare lo stesso
    // foglio raddoppiava tutto.
    const chiave=x=>KEY([x.atletaId,x.articolo,x.taglia,x.modello||'',x.numeroDesiderato??''].join('|'));
    const gia=new Set(Object.values(S.richieste).map(chiave));
-   for(const riga of righe){
+   const visti=new Set();
+   const stag=D.set.stagione||'';const consegnati=new Set();
+   for(const m of Object.values(S.movimenti)){if(m.tipo!=='CONSEGNA'||!m.atletaId||(m.stagione||'')!==stag)continue;
+     consegnati.add(KEY(m.atletaId+'|'+m.articolo+'|'+(D.conNumero(m.articolo)?'':m.taglia)))}
+   for(const [i,riga] of righe.entries()){
+    const q=nr(i);
     const sq=COL(riga,0).toUpperCase();const cog=COL(riga,1);const nom=COL(riga,2);
     const artScritto=COL(riga,3);
     if(!sq&&!cog&&!nom&&!artScritto){r.saltati++;continue}
+    if(!sq||!cog||!nom||!artScritto){r.problemi.push(`${q}: ${quali([!sq&&'la squadra',!cog&&'il cognome',!nom&&'il nome',!artScritto&&'l\'articolo'])} ${[!sq,!cog,!nom,!artScritto].filter(Boolean).length===1?'manca':'mancano'}`);continue}
     const aid=perNome.get(KEY(sq+'|'+cog+'|'+nom));
-    if(aid===OMONIMI){r.problemi.push(`in ${sq} ci sono due atleti di nome ${cog} ${nom}: la richiesta va inserita a mano`);continue}
-    if(!aid){r.problemi.push(`nessun atleta ${cog} ${nom} in ${sq}`);continue}
+    if(aid===OMONIMI){r.problemi.push(`${q}: in ${sq} ci sono due atleti di nome ${cog} ${nom}: la richiesta va inserita a mano`);continue}
+    if(!aid){r.problemi.push(`${q}: nessun atleta ${cog} ${nom} in ${sq}`);continue}
     const a=articoloDaNome(D,artScritto);
-    if(!a){r.problemi.push(`articolo sconosciuto: ${artScritto} (per ${cog} ${nom})`);continue}
+    if(!a){r.problemi.push(`${q}: articolo "${artScritto}" sconosciuto (si può indicare il nome, il codice o il nome visualizzato)`);continue}
     const tg=tagliaArticolo(a,COL(riga,4)||'UNICA');
-    if(!tg){r.problemi.push(`${cog} ${nom}: la taglia "${COL(riga,4)}" non è prevista per ${artLabel(a.nome)}`);continue}
-    const nd=COL(riga,5);const numero=nd===''?null:Number(nd);
-    if(nd!==''&&!Number.isInteger(numero)){r.problemi.push(`numero desiderato non valido per ${cog} ${nom}: ${nd}`);continue}
+    if(!tg){r.problemi.push(`${q}: la taglia "${COL(riga,4)}" non è prevista per ${artLabel(a.nome)} (previste: ${(a.taglie||[]).join(', ')||'unica'})`);continue}
+    const numero=numeroMaglia(COL(riga,5));
+    if(Number.isNaN(numero)){r.problemi.push(`${q}: numero desiderato "${COL(riga,5)}" non valido: serve un numero intero da 0 a 99`);continue}
+    if(numero!==null&&!a.conNumero)r.avvisi.push(`${q}: ${artLabel(a.nome)} non ha il numero stampato: il numero desiderato viene ignorato`);
     const tipo=COL(riga,7).toUpperCase();
-    const modello=a.conNumero&&tipo&&D.comuni.has(tipo)?tipo:'';
-    const nuova={atletaId:aid,articolo:a.nome,modello,taglia:tg,numeroDesiderato:a.conNumero?numero:null,note:COL(riga,6)};
-    if(gia.has(chiave(nuova))){r.saltati++;continue}
-    gia.add(chiave(nuova));
-    await S.db.collection('richieste').add({...nuova,ordine:++ordine});
+    if(tipo&&(!a.conNumero||!D.comuni.has(tipo))){r.problemi.push(`${q}: tipo di divisa "${tipo}" non ammesso${a.conNumero?` (ammessi: ${[...D.comuni].join(', ')} oppure vuoto)`:': l\'articolo non è una divisa'}`);continue}
+    const at=S.atlete[aid];
+    if(at.inUscita||at.attiva===false)r.avvisi.push(`${q}: ${cog} ${nom} è ${at.inUscita?'in uscita':'non attivo'}: la richiesta non verrà servita`);
+    if(a.distribuibile===false)r.avvisi.push(`${q}: ${artLabel(a.nome)} non è più in distribuzione: la richiesta resterà esclusa`);
+    const nuova={atletaId:aid,articolo:a.nome,modello:a.conNumero?tipo:'',taglia:tg,numeroDesiderato:a.conNumero?numero:null,note:COL(riga,6)};
+    const k=chiave(nuova);
+    if(visti.has(k)){r.avvisi.push(`${q}: la stessa richiesta compare più volte nel foglio: riga ignorata`);r.saltati++;continue}
+    visti.add(k);
+    if(gia.has(k)){r.saltati++;continue}
+    if(consegnati.has(KEY(aid+'|'+a.nome+'|'+(a.conNumero?'':tg)))){r.avvisi.push(`${q}: ${cog} ${nom} ha già ricevuto ${artLabel(a.nome)} in questa stagione: richiesta non creata`);r.saltati++;continue}
+    if(a.conNumero&&numero!==null){const chi=Object.values(S.divise).find(d=>!d.dismessa&&d.holder&&d.holder!==aid&&!d.daRestituire&&S.atlete[d.holder]&&S.atlete[d.holder].squadra===at.squadra&&Number(d.numero)===numero);
+      if(chi)r.avvisi.push(`${q}: in ${teamLabel(at.squadra)} il n.${numero} è già di ${fullName(S.atlete[chi.holder])}: verrà proposto un altro numero`)}
+    if(!prova)await S.db.collection('richieste').add({...nuova,ordine:++ordine});
     r.creati++}
    return r}}
 };
@@ -3190,7 +3313,7 @@ async function caricaModulo(){
   const perTitolo={};
   for(const a of arts){perTitolo[KEY(artLabel(a.nome))]=a;perTitolo[KEY(a.nome)]=a}
 
-  const daFare=[];const problemi=[];const colonneIgnote=new Set();
+  const daFare=[];const problemi=[];const colonneIgnote=new Set();const avvisiModulo=[];const vistiModulo=new Set();
   // Dal nome del foglio alla squadra: lo stesso calcolo fatto allo scarico,
   // cosi' una squadra dal nome lungo o con una barra si ritrova.
   const perFoglio={};
@@ -3238,31 +3361,50 @@ async function caricaModulo(){
           else if(m.tipo==='taglia')a.taglia=v;
           else a.tagliaRic=v}});
       if(!dati.cognome&&!dati.nome)continue;
-      if(!dati.cognome||!dati.nome){problemi.push(`${nomeFoglio}: riga senza cognome o nome (${dati.cognome||dati.nome})`);continue}
+      const q=`${nomeFoglio}, riga ${i+1}`;
+      if(!dati.cognome||!dati.nome){problemi.push(`${q}: manca il ${dati.cognome?'nome':'cognome'} (${dati.cognome||dati.nome})`);continue}
+      dati.q=q;
+      if(dati.numero&&Number.isNaN(numeroMaglia(dati.numero))){avvisiModulo.push(`${q}: numero di maglia "${dati.numero}" non valido: ignorato`);dati.numero=''}
+      if(sembraRecapito(dati.note)){avvisiModulo.push(`${q}: la nota sembra contenere un recapito e non viene caricata`);dati.note=''}
+      const kd=KEY(squadra+'|'+dati.cognome+'|'+dati.nome);
+      if(vistiModulo.has(kd)){avvisiModulo.push(`${q}: ${dati.cognome} ${dati.nome} compare più volte per ${teamLabel(squadra)}: riga ignorata`);continue}
+      vistiModulo.add(kd);
       daFare.push(dati);
     }
   }
   // Una volta sola, non una per foglio: se no l'elenco si riempie di copie e
   // i problemi delle righe non si vedono piu'.
-  for(const t of colonneIgnote)problemi.push(`la colonna "${t}" non corrisponde a nessun articolo ed è stata ignorata`);
+  for(const t of colonneIgnote)avvisiModulo.push(`la colonna "${t}" non corrisponde a nessun articolo ed è stata ignorata`);
   if(!daFare.length){toast(problemi.length?problemi[0]:'Il modulo non contiene righe compilate');
-    S.app.problemiExcel=problemi;render();return}
-
-  const quante=daFare.reduce((n,d)=>n+Object.values(d.articoli).filter(x=>['manca','cambia'].includes(modRisposta(x.risposta))).length,0);
-  const nuove=[...squadreNuove];
-  if(!await chiedi(`Caricare ${daFare.length} ${daFare.length===1?'riga':'righe'} da ${(n=>n===1?'una squadra':n+' squadre')(new Set(daFare.map(d=>d.squadra)).size)}?\nRisposte che chiedono un articolo: ${quante}; quelle già presenti o già consegnate vengono ignorate.`
-    +(nuove.length?`\n\nAttenzione: ${nuove.length===1?'questo foglio non corrisponde':'questi fogli non corrispondono'} a nessuna squadra e ${nuove.length===1?'diventa una squadra nuova':'diventano squadre nuove'}: ${nuove.join(', ')}.`:'')))return;
-
+    mostraEsitoExcel('Modulo di distribuzione',{problemi,avvisi:avvisiModulo},'nessuna riga compilata');return}
+  // Prima un giro di prova, senza scrivere: si vede cosa succederebbe.
+  const prova=await eseguiModulo(D,daFare,true);
+  prova.problemi.unshift(...problemi);prova.avvisi.unshift(...avvisiModulo);
+  prova.squadreNuove=[...squadreNuove];
+  if(!prova.creati&&!prova.aggiornati){mostraEsitoExcel('Modulo di distribuzione',prova,'nessun dato nuovo da caricare');return}
+  if(!await chiedi(riepilogoCaricamento('Modulo di distribuzione',prova,{creati:['atleta nuovo','atleti nuovi'],aggiornati:['richiesta nuova o corretta','richieste nuove o corrette']})))return;
   S.busy=true;render();
-  const esito={creati:0,aggiornati:0,saltati:0,problemi};
-  try{
+  let esito;
+  try{esito=await eseguiModulo(D,daFare,false)}
+  catch(e){S.busy=false;render();toast('Caricamento interrotto: '+e);return}
+  S.busy=false;
+  esito.problemi.unshift(...problemi);esito.avvisi.unshift(...avvisiModulo);esito.squadreNuove=prova.squadreNuove;
+  mostraEsitoExcel('Modulo di distribuzione',esito,sintesiEsito(esito,{creati:['atleta nuovo','atleti nuovi'],aggiornati:['richiesta','richieste']}));
+}
+
+/* Il modulo applicato davvero, o solo provato (prova=true: niente scritture,
+   gli atleti nuovi hanno un segnaposto al posto dell'id). */
+async function eseguiModulo(D,daFare,prova){
+
+  const esito=nuovoEsito();
+  {
     const squadre=[...(D.set.squadre||[])];
     const viste=new Set(squadre.map(x=>KEY(x.nome)));
     // Le squadre nuove si scrivono subito, prima degli atleti: se il
     // caricamento si interrompe, nessun atleta resta senza squadra.
     for(const d of daFare)if(!viste.has(KEY(d.squadra))){
       squadre.push({nome:d.squadra,includi:true,modelloDivisa:'STANDARD',ordine:prossimoOrdine(squadre)});viste.add(KEY(d.squadra))}
-    if(squadre.length!==(D.set.squadre||[]).length)await S.db.doc('settings/main').update({squadre});
+    if(!prova&&squadre.length!==(D.set.squadre||[]).length)await S.db.doc('settings/main').update({squadre});
     // indice degli atleti gia' dentro, per non rifarli
     const perNome=Object.fromEntries(indiceAtleti());
     // Le richieste aperte, per atleta e articolo: una uguale si salta, una con
@@ -3280,31 +3422,36 @@ async function caricaModulo(){
     for(const d of daFare){
       const k=KEY(d.squadra+'|'+d.cognome+'|'+d.nome);
       let aid=perNome[k];
-      if(aid===OMONIMI){esito.problemi.push(`${d.cognome} ${d.nome}: in ${d.squadra} ci sono due atleti con questo nome; la riga va inserita a mano`);continue}
+      if(aid===OMONIMI){esito.problemi.push(`${d.q}: in ${d.squadra} ci sono due atleti di nome ${d.cognome} ${d.nome}; la riga va inserita a mano`);continue}
       if(!aid){
-        const nuovo=await S.db.collection('atlete').add({squadra:d.squadra,cognome:d.cognome,nome:d.nome,attiva:true,note:d.note||''});
-        aid=nuovo.id;perNome[k]=aid;esito.creati++;
+        if(prova)aid='NUOVO|'+k;
+        else{const nuovo=await S.db.collection('atlete').add({squadra:d.squadra,cognome:d.cognome,nome:d.nome,attiva:true,note:d.note||''});aid=nuovo.id}
+        perNome[k]=aid;esito.creati++;
       }else if(d.note&&!S.atlete[aid].note){
-        await S.db.doc('atlete/'+aid).update({note:d.note});
+        if(!prova)await S.db.doc('atlete/'+aid).update({note:d.note});
       }
+      const at=S.atlete[aid];
+      if(at&&(at.inUscita||at.attiva===false))esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome} è ${at.inUscita?'in uscita':'non attivo'}: le sue richieste non verranno servite`);
       for(const x of Object.values(d.articoli)){
         const r=modRisposta(x.risposta);
         if(r===''||r==='ha')continue;
-        if(r==='?'){esito.problemi.push(`${d.cognome} ${d.nome}: risposta "${x.risposta}" non riconosciuta per ${artLabel(x.art.nome)} (ammesse: ce l’ho, mi manca, da cambiare)`);continue}
+        if(r==='?'){esito.problemi.push(`${d.q}: ${d.cognome} ${d.nome}: risposta "${x.risposta}" non riconosciuta per ${artLabel(x.art.nome)} (ammesse: ce l’ho, mi manca, da cambiare)`);continue}
         const conNum=D.conNumero(x.art.nome);
         const scritta=x.tagliaRic||x.taglia||(modConTaglie(x.art)?'':'UNICA');
-        if(!scritta){esito.problemi.push(`${d.cognome} ${d.nome}: manca la taglia per ${artLabel(x.art.nome)}`);continue}
+        if(!scritta){esito.problemi.push(`${d.q}: ${d.cognome} ${d.nome}: manca la taglia per ${artLabel(x.art.nome)}`);continue}
+        if(sembraData(scritta)){esito.problemi.push(`${d.q}: ${d.cognome} ${d.nome}: la taglia "${scritta}" sembra una data (Excel trasforma per esempio 5-6 in una data)`);continue}
         const taglia=tagliaArticolo(x.art,scritta);
-        if(!taglia){esito.problemi.push(`${d.cognome} ${d.nome}: la taglia "${scritta}" non è prevista per ${artLabel(x.art.nome)}`);continue}
-        if(consegnati.has(KEY(aid+'|'+x.art.nome+'|'+(conNum?'':taglia)))){esito.saltati++;continue}
+        if(!taglia){esito.problemi.push(`${d.q}: ${d.cognome} ${d.nome}: la taglia "${scritta}" non è prevista per ${artLabel(x.art.nome)} (previste: ${(x.art.taglie||[]).join(', ')||'unica'})`);continue}
+        if(consegnati.has(KEY(aid+'|'+x.art.nome+'|'+(conNum?'':taglia)))){esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome} ha già ricevuto ${artLabel(x.art.nome)} in questa stagione: richiesta non creata`);esito.saltati++;continue}
         const stesse=aperte[KEY(aid+'|'+x.art.nome)]||[];
         if(stesse.some(([,r])=>r.taglia===taglia)){esito.saltati++;continue}
         if(stesse.length&&!conNum){
           // stessa cosa, taglia diversa: la richiesta si corregge
-          const [rid]=stesse[0];await S.db.doc('richieste/'+rid).update({taglia});stesse[0][1]={...stesse[0][1],taglia};
+          const [rid]=stesse[0];if(!prova)await S.db.doc('richieste/'+rid).update({taglia});stesse[0][1]={...stesse[0][1],taglia};
+          esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome}: la richiesta di ${artLabel(x.art.nome)} passa alla taglia ${taglia}`);
           esito.aggiornati++;continue}
         const nuova={atletaId:aid,articolo:x.art.nome,taglia,modello:'',numeroDesiderato:null,note:'',ordine:Date.now()};
-        const ref=await S.db.collection('richieste').add(nuova);
+        const ref=prova?{id:'PROVA'}:await S.db.collection('richieste').add(nuova);
         (aperte[KEY(aid+'|'+x.art.nome)]=stesse).push([ref&&ref.id,nuova]);
         esito.aggiornati++;
         // "da cambiare" su una divisa: quella che ha adesso torna disponibile
@@ -3313,24 +3460,19 @@ async function caricaModulo(){
           // della divisa da gara.
           const sue=Object.entries(S.divise).filter(([id,dv])=>dv.holder===aid&&!dv.dismessa&&stessoGenere(dv.modello,''));
           const suo=d.numero?sue.find(([,dv])=>Number(dv.numero)===Number(d.numero)):(sue.length===1?sue[0]:null);
-          if(suo){if(!suo[1].daRestituire)await S.db.doc('divise/'+suo[0]).update({daRestituire:true})}
-          else esito.problemi.push(sue.length>1&&!d.numero
-            ?`${d.cognome} ${d.nome}: deve cambiare la divisa ma ne ha più di una e il numero non è indicato: va segnata a mano`
-            :`${d.cognome} ${d.nome}: deve cambiare la divisa ma non ne risulta nessuna${d.numero?' con il n.'+d.numero:''}`);
+          if(suo){if(!suo[1].daRestituire&&!prova)await S.db.doc('divise/'+suo[0]).update({daRestituire:true})}
+          else esito.avvisi.push(sue.length>1&&!d.numero
+            ?`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma ne ha più di una e il numero non è indicato: va segnata a mano`
+            :`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma non ne risulta nessuna${d.numero?' con il n.'+d.numero:''}`);
         }
       }
     }
-  }catch(e){S.busy=false;S.app.problemiExcel=esito.problemi;render();toast('Caricamento interrotto: '+e);return}
-  S.busy=false;
-  const pezzi=[];
-  if(esito.creati)pezzi.push(`${esito.creati} ${esito.creati===1?'atleta nuovo':'atleti nuovi'}`);
-  if(esito.aggiornati)pezzi.push(`${esito.aggiornati} ${esito.aggiornati===1?'richiesta':'richieste'}`);
-  if(esito.saltati)pezzi.push(`${esito.saltati} già presenti o già consegnate`);
-  toast(pezzi.join(', ')||'niente da aggiungere');
-  S.app.problemiExcel=esito.problemi;
-  render();
+  }
+  return esito;
 }
 
+/* Scarica il foglio, gia' pieno di quello che c'e' nel programma, con in
+   fondo le colonne solo informative. */
 async function scaricaModello(tipo){
   const m=MODELLI_EXCEL[tipo];if(!m)return;
   if(!window.__APP){toast('Il foglio si scarica dal programma installato');return}
@@ -3339,12 +3481,79 @@ async function scaricaModello(tipo){
   try{
     const dove=await window.__APP.scegliDoveSalvare(`${m.foglio.toLowerCase()}-${today()}.xlsx`);
     if(!dove)return;
-    await window.__APP.scriviExcel(dove,m.foglio,m.colonne,m.righe().map(r=>r.map(c=>c==null?'':String(c))),m.istruzioni);
+    await window.__APP.scriviExcel(dove,m.foglio,[...m.colonne,...(m.info||[])],m.righe().map(r=>r.map(c=>c==null?'':String(c))),m.istruzioni);
     toast('Foglio salvato');
   }catch(e){toast('Scrittura del file non riuscita: '+e)}
 }
 
-/* Legge il foglio compilato, dice cosa succederebbe, e applica se confermi. */
+/* Il registro dei movimenti, solo da scaricare. */
+async function scaricaMovimenti(){
+  if(!window.__APP){toast('Il foglio si scarica dal programma installato');return}
+  const D=derive();
+  const righe=Object.values(S.movimenti).sort((a,b)=>(a.ts||0)-(b.ts||0)).map(m=>{const a=S.atlete[m.atletaId];
+    // Chi non e' piu' in archivio, o non e' un atleta, ha il nome scritto sul movimento.
+    return [m.data||'',cap(m.tipo||''),a?fullName(a):(m.a||''),a?teamLabel(a.squadra):'',artCodiceTaglia(m.articolo,m.taglia),artLabel(m.articolo),
+      m.taglia==='UNICA'?'unica':(m.taglia||''),m.numero==null?'':String(m.numero),String(m.qta??''),m.stagione||'',m.note||'']});
+  if(!righe.length){toast('Nessun movimento registrato');return}
+  try{
+    const dove=await window.__APP.scegliDoveSalvare(`movimenti-${today()}.xlsx`);
+    if(!dove)return;
+    await window.__APP.scriviExcel(dove,'Movimenti',
+      ['Data','Tipo','Atleta o destinatario','Squadra','Codice','Articolo','Taglia','Numero','Quantità','Stagione','Nota'],righe,
+      ['MOVIMENTI — il registro di consegne, rientri, carichi e rettifiche, dal più vecchio.',
+       '',`${righe.length} movimenti al ${fmtDate(today())}. Il foglio è solo da consultare: non si ricarica.`]);
+    toast('Foglio salvato');
+  }catch(e){toast('Scrittura del file non riuscita: '+e)}
+}
+
+/* La domanda prima di caricare: cosa verra' aggiunto, cosa ignorato, quali
+   righe hanno errori. */
+function riepilogoCaricamento(nome,e,voci){
+  const n=(v,k)=>`${v} ${v===1?voci[k][0]:voci[k][1]}`;
+  const righe=[`Foglio «${nome}»: controllo completato.`,''];
+  const da=[];
+  if(e.creati)da.push(n(e.creati,'creati'));
+  if(e.aggiornati&&voci.aggiornati)da.push(n(e.aggiornati,'aggiornati'));
+  righe.push(`Da aggiungere: ${da.join(', ')||'niente'}.`);
+  if(e.saltati)righe.push(`Già presenti, ignorati: ${e.saltati}.`);
+  if(e.squadreNuove&&e.squadreNuove.length)righe.push(`Squadre nuove: ${e.squadreNuove.join(', ')}.`);
+  if(e.lottiNuovi&&e.lottiNuovi.length)righe.push(`Lotti di divise nuovi: ${e.lottiNuovi.join(', ')}.`);
+  if(e.problemi.length){righe.push('',`${e.problemi.length===1?'Una riga contiene errori e non verrà caricata':e.problemi.length+' righe contengono errori e non verranno caricate'}:`);
+    righe.push(...e.problemi.slice(0,5).map(x=>'• '+x));if(e.problemi.length>5)righe.push(`• …e altre ${e.problemi.length-5}`)}
+  if(e.avvisi.length)righe.push('',`Avvisi da verificare: ${e.avvisi.length} (l'elenco resta in Impostazioni).`);
+  righe.push('','Caricare i dati validi?');
+  return righe.join('\n');
+}
+function sintesiEsito(e,voci){
+  const pezzi=[];
+  if(e.creati)pezzi.push(`${e.creati} ${e.creati===1?voci.creati[0]:voci.creati[1]}`);
+  if(e.aggiornati&&voci.aggiornati)pezzi.push(`${e.aggiornati} ${e.aggiornati===1?voci.aggiornati[0]:voci.aggiornati[1]}`);
+  if(e.saltati)pezzi.push(`${e.saltati} già presenti`);
+  if(e.problemi.length)pezzi.push(`${e.problemi.length} con errori`);
+  return pezzi.join(', ')||'Niente da aggiungere';
+}
+/* L'esito di un caricamento: una finestra che si apre appena finito, con il
+   riepilogo, le righe non caricate e gli avvisi. In fondo alle Impostazioni
+   passava inosservato. Resta ricordato per poterla riaprire. */
+function mostraEsitoExcel(nome,e,sintesi){
+  S.app.esitoExcel={nome,problemi:e.problemi||[],avvisi:e.avvisi||[],sintesi:sintesi||'',quando:new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})};
+  S.app.problemiExcel=e.problemi||[];
+  render();
+  finestraEsitoExcel();
+}
+function finestraEsitoExcel(){
+  const e=S.app.esitoExcel;if(!e)return;
+  const blocco=(titolo,voci,cls)=>voci.length?`<h3 class="esitoTit ${cls}">${titolo}</h3><ul class="esitoLista">${voci.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`:'';
+  openDlg(`<h2>Esito del caricamento</h2>
+  <p class="sub">«${esc(e.nome)}», alle ${esc(e.quando)}${e.sintesi?`: ${esc(e.sintesi)}`:''}.</p>
+  ${!e.problemi.length&&!e.avvisi.length?'<div class="notice">Tutte le righe sono state caricate o erano già presenti: nessun errore e nessun avviso.</div>':''}
+  ${blocco(e.problemi.length===1?'Una riga non caricata':e.problemi.length+' righe non caricate',e.problemi,'bad')}
+  ${blocco(e.avvisi.length===1?'Un avviso da verificare':e.avvisi.length+' avvisi da verificare',e.avvisi,'')}
+  <div class="dlg-actions"><button class="btn primary" value="cancel">Chiudi</button></div>`,null);
+}
+
+/* Legge il foglio compilato, lo controlla, dice cosa succederebbe, e carica
+   solo se si conferma. */
 async function caricaModello(tipo){
   const m=MODELLI_EXCEL[tipo];if(!m)return;
   if(!window.__APP){toast('Il foglio si carica dal programma installato');return}
@@ -3361,76 +3570,53 @@ async function caricaModello(tipo){
   // (le divise caricate come atleti) viene rifiutato invece di creare righe
   // senza senso.
   const iTit=righe.slice(0,5).findIndex(r=>m.obbligatorie.every(c=>r.map(KEY).includes(KEY(c))));
-  if(iTit<0){toast(`Questo non sembra il foglio ${m.nome}: mancano le colonne ${m.obbligatorie.join(', ')}`);return}
+  if(iTit<0){toast(`Questo non sembra il foglio «${m.nome}»: mancano le colonne ${m.obbligatorie.join(', ')}`);return}
   const titoli=righe[iTit].map(KEY);
+  const doppie=titoli.filter((t,k)=>t&&titoli.indexOf(t)!==k);
+  if(doppie.length){toast(`Il foglio ha colonne ripetute (${[...new Set(doppie)].join(', ')}): correggere il foglio e riprovare`);return}
+  const note=new Set([...m.colonne,...(m.info||[])].map(KEY));
+  const ignote=righe[iTit].filter(t=>String(t??'').trim()&&!note.has(KEY(t)));
   const pos=m.colonne.map(c=>titoli.indexOf(KEY(c)));
-  const dati=righe.slice(iTit+1).map(r=>pos.map(i=>i<0?'':(r[i]??''))).filter(r=>r.some(c=>String(c).trim()));
+  const tutte=righe.slice(iTit+1).map((r,k)=>({r,n:iTit+2+k}));
+  const piene=tutte.filter(x=>x.r.some(c=>String(c??'').trim()));
+  const dati=piene.map(x=>pos.map(k=>k<0?'':(x.r[k]??'')));
+  const nr=k=>`riga ${piene[k].n}`;
   if(!dati.length){toast('Nel foglio ci sono solo le intestazioni');return}
 
-  if(!await chiedi(`Caricare ${dati.length} ${dati.length===1?'riga':'righe'} dal foglio ${m.nome}?\nI dati già presenti non vengono modificati: le righe doppie vengono saltate.`))return;
+  const prova=await m.applica(dati,true,nr);
+  if(ignote.length)prova.avvisi.unshift(`colonne non riconosciute, ignorate: ${ignote.join(', ')}`);
+  if(!prova.creati&&!prova.aggiornati){mostraEsitoExcel(m.nome,prova,'nessun dato nuovo da caricare');return}
+  if(!await chiedi(riepilogoCaricamento(m.nome,prova,m.voci)))return;
 
   S.busy=true;render();
   let esito;
-  try{esito=await m.applica(dati)}
+  try{esito=await m.applica(dati,false,nr)}
   catch(e){S.busy=false;render();toast('Caricamento interrotto: '+e);return}
   S.busy=false;
-
-  const pezzi=[];
-  if(esito.creati)pezzi.push(`${esito.creati} aggiunti`);
-  if(esito.aggiornati)pezzi.push(`${esito.aggiornati} ${esito.aggiornati===1?'riga':'righe'} di magazzino`);
-  if(esito.saltati)pezzi.push(`${esito.saltati} già presenti`);
-  toast(pezzi.join(', ')||'niente da aggiungere');
-  S.app.problemiExcel=esito.problemi;
-  render();
+  if(ignote.length)esito.avvisi.unshift(`colonne non riconosciute, ignorate: ${ignote.join(', ')}`);
+  mostraEsitoExcel(m.nome,esito,sintesiEsito(esito,m.voci));
 }
 
 function sezioneExcel(){
-  const p=S.app.problemiExcel||[];
-  if(S.busy)return `<h2>Riempire da Excel</h2><div class="notice">Caricamento del foglio in corso: attendere il termine prima di proseguire.</div>`;
-  return `<h2>Riempire da Excel</h2>
+  if(S.busy)return `<h2>Fogli Excel</h2><div class="notice">Caricamento del foglio in corso: attendere il termine prima di proseguire.</div>`;
+  const e=S.app.esitoExcel;
+  return `<h2>Fogli Excel</h2>
+  <p class="sub">Ogni foglio si scarica con i dati presenti nel programma e si può ricaricare per aggiungerne di nuovi: il caricamento aggiunge soltanto, non modifica né cancella. Prima di caricare, il programma controlla ogni riga e mostra cosa verrà aggiunto, cosa verrà ignorato e quali righe contengono errori. Le colonne informative in fondo ai fogli vengono ignorate.</p>
   <div class="list" style="margin-bottom:12px"><div class="item"><div class="main">
   <div class="name">Modulo di distribuzione</div>
-  <div class="meta">Un foglio per squadra, con gli atleti già inseriti. Nelle caselle si indica soltanto «ce l’ho», «mi manca» o «da cambiare».</div></div>
+  <div class="meta">Da compilare a cura dei dirigenti: un foglio per squadra, con gli atleti già inseriti. Nelle caselle si indica soltanto «ce l’ho», «mi manca» o «da cambiare».</div></div>
   <div class="right"><button type="button" class="btn small" data-act="scaricaModulo">Scarica</button>
   <button type="button" class="btn small primary" data-act="caricaModulo">Carica</button></div></div></div>
-  <p class="sub">Il foglio si scarica, si compila (o si fa compilare ai dirigenti) e si ricarica. I fogli vengono scaricati già compilati con i dati presenti nel programma e servono quindi anche come verifica. I quattro fogli qui sotto vanno caricati nell’ordine indicato: le richieste richiedono gli atleti, e gli atleti gli articoli.</p>
+  <p class="sub">I quattro fogli seguenti vanno caricati nell’ordine indicato: le richieste richiedono gli atleti, e gli atleti gli articoli.</p>
   <div class="list">`+
-  Object.entries(MODELLI_EXCEL).map(([tipo,m],i)=>`<div class="item"><div class="main"><div class="name">${i+1}. ${esc(m.nome)}</div><div class="meta">${esc(m.colonne.join(' · '))}</div></div>
+  Object.entries(MODELLI_EXCEL).map(([tipo,m],i)=>`<div class="item"><div class="main"><div class="name">${i+1}. ${esc(m.nome)}</div><div class="meta">${esc(m.colonne.join(' · '))}${m.info&&m.info.length?` <span class="soloInfo">· informative: ${esc(m.info.join(', '))}</span>`:''}</div></div>
   <div class="right"><button type="button" class="btn small" data-act="scaricaXls" data-v="${tipo}">Scarica</button>
   <button type="button" class="btn small primary" data-act="caricaXls" data-v="${tipo}">Carica</button></div></div>`).join('')+
-  `</div>`+
-  (p.length?`<div class="list" style="margin-top:10px"><div class="item"><div class="main"><div class="name">Righe non caricate dall'ultimo foglio (${p.length})</div><div class="meta">${p.slice(0,12).map(esc).join('<br>')}${p.length>12?'<br>…e altre '+(p.length-12):''}</div></div></div></div>`:'');
-}
-
-/* ============ export ============ */
-async function esporta(kind){
-  const D=derive();const rows=[];
-  // Un testo che comincia con = + - @ Excel lo esegue come formula: una nota
-  // scritta cosi' diventerebbe un comando. Si mette un apostrofo davanti.
-  const q=v=>{let s=String(v??'');if(/^[=+\-@]/.test(s)&&!/^-?\d+([.,]\d+)?$/.test(s))s="'"+s;return /[;"\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
-  const perSquadra=(a,b)=>(D.teamIdx[a.squadra]??99)-(D.teamIdx[b.squadra]??99)||norm(fullName(a)).localeCompare(norm(fullName(b)));
-  if(kind==='atlete'){rows.push(['Squadra','Cognome','Nome','Attiva','Divise']);
-    Object.entries(S.atlete).sort((a,b)=>(D.teamIdx[a[1].squadra]??99)-(D.teamIdx[b[1].squadra]??99)||norm(fullName(a[1])).localeCompare(norm(fullName(b[1])))).forEach(([id,a])=>rows.push([a.squadra,a.cognome,a.nome,a.attiva===false?'no':'si',(D.perAtleta[id]||[]).map(x=>{const d=S.divise[x];return`${d.taglia} ${d.numero}${d.modello!=='STANDARD'?' '+d.modello.toLowerCase():''}${d.daRestituire?' (da cambiare)':''}`}).join(', ')]))}
-  if(kind==='divise'){rows.push(['Modello','Taglia','Numero','Stato','Atleta','Squadra','Prenotata per','Note']);
-    Object.entries(S.divise).sort((a,b)=>(a[1].modello||'').localeCompare(b[1].modello||'')||szIdx(a[1].taglia)-szIdx(b[1].taglia)||a[1].numero-b[1].numero).forEach(([id,d])=>{const a=S.atlete[d.holder];const pr=D.prenDivisa[id];
-      rows.push([d.modello,d.taglia,d.numero,d.dismessa?'dismessa':!d.holder?'in magazzino':d.daRestituire?'da cambiare':'in uso',a?fullName(a):'',a?a.squadra:'',pr?fullName(S.atlete[S.richieste[pr].atletaId]):'',d.note||''])})}
-  if(kind==='materiale'){rows.push(['Codice','Articolo','Nome interno','Taglia','Totale','Consegnati','In magazzino','Prenotati','Ordinati','Magazzino finale']);
-    // Le stesse sei colonne della schermata, con lo stesso calcolo.
-    const mancano={};for(const [rid,pp] of Object.entries(D.prop)){if(pp.esito!=='MANCA')continue;const r=S.richieste[rid];if(D.conNumero(r.articolo))continue;const k=D.key(r.articolo,r.taglia);mancano[k]=(mancano[k]||0)+1}
-    Object.entries(D.stock).filter(([k])=>!D.conNumero(k.split('|')[0]))
-      .sort((x,y)=>perNome({nome:x[0].split('|')[0]},{nome:y[0].split('|')[0]})||szIdx(x[0].split('|')[1])-szIdx(y[0].split('|')[1]))
-      .forEach(([k,s])=>{const [a,t]=k.split('|');const p=D.prenMat[k]||0;const fuori=Math.max(0,(s.consegne||0)-(s.rientri||0));const ord=s.ordinati||0;
-        rows.push([artCodiceTaglia(a,t),artLabel(a),a,t,s.ora+fuori,fuori,s.ora,p,ord,s.ora-p-(mancano[k]||0)+ord])})}
-  if(kind==='assegnazioni'){rows.push(['Squadra','Cognome','Nome','Articolo','Modello','Taglia','Numero chiesto','Esito','Numero proposto','Motivo','Nota']);
-    [...D.order].sort((x,y)=>perSquadra(S.atlete[S.richieste[x].atletaId]||{},S.atlete[S.richieste[y].atletaId]||{})).forEach(rid=>{const r=S.richieste[rid];const a=S.atlete[r.atletaId]||{};const p=D.prop[rid];const d=p.divisaId?S.divise[p.divisaId]:null;
-      rows.push([a.squadra,a.cognome,a.nome,r.articolo,D.conNumero(r.articolo)?D.modelloPer(r):(r.modello||''),r.taglia,r.numeroDesiderato??'',p.esito==='OK'?'pronta':p.esito==='MANCA'?'manca':'esclusa',d?d.numero:'',p.motivo||'',r.note||''])})}
-  if(kind==='movimenti'){rows.push(['Data','Tipo','Atleta o destinatario','Squadra','Articolo','Taglia','Numero','Quantità','Stagione','Nota']);
-    // Chi non e' piu' in archivio, o non e' un atleta, ha il nome scritto sul movimento.
-    Object.values(S.movimenti).sort((a,b)=>(a.ts||0)-(b.ts||0)).forEach(m=>{const a=S.atlete[m.atletaId];rows.push([m.data,m.tipo,a?fullName(a):(m.a||''),a?a.squadra:'',artLabel(m.articolo),m.taglia,m.numero??'',m.qta,m.stagione,m.note||''])})}
-  const csv='\ufeff'+rows.map(r=>r.map(q).join(';')).join('\r\n');
-  const name=`magazzino-${kind}-${today()}.csv`;
-  if(!S.dl){toast('Il download non è disponibile in questa vista.');return}
-  try{const r=await S.dl.save({filename:name,data:csv});if(r&&r.status==='cancelled')return;toast('File salvato')}catch(e){if(e&&e.code==='declined')return;toast(e&&e.code==='rate_limited'?'Attendere qualche istante e riprovare.':'Download non riuscito.')}
+  `<div class="item"><div class="main"><div class="name">Movimenti</div><div class="meta">Il registro completo, solo da consultare.</div></div>
+  <div class="right"><button type="button" class="btn small" data-act="scaricaMov">Scarica</button></div></div></div>`+
+  (e?`<div class="list" style="margin-top:10px"><div class="item"><div class="main"><div class="name">Ultimo caricamento: «${esc(e.nome)}», alle ${esc(e.quando)}</div>
+    <div class="meta">${e.problemi.length?`<b class="neg">${e.problemi.length===1?'una riga non caricata':e.problemi.length+' righe non caricate'}</b>`:'nessuna riga scartata'}${e.avvisi.length?` · ${e.avvisi.length===1?'un avviso':e.avvisi.length+' avvisi'}`:''}</div></div>
+    <div class="right"><button type="button" class="btn small" data-act="rivediEsito">Rivedi</button></div></div></div>`:'');
 }
 
 /* ============ avvio ============ */
