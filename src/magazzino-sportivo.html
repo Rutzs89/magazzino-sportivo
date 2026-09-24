@@ -1654,7 +1654,7 @@ function vManuale(){
     <p>Il <b>modulo di distribuzione</b> è destinato ai dirigenti: contiene un foglio per squadra con gli atleti già inseriti e gli articoli della stagione in corso. Ogni articolo ha il nome nella prima riga dell'intestazione e, sotto, due colonne: la <i>Risposta</i> (<i>ce l'ho</i>, <i>mi manca</i>, <i>da cambiare</i>, dal menu a tendina; la casella vuota equivale a <i>ce l'ho</i>) e la <i>Taglia</i> da consegnare, dal menu con le taglie dell'articolo; gli articoli senza taglie hanno la sola risposta. La colonna <i>Numero maglia</i> riporta il numero attuale; la colonna <i>Note</i> è libera. Al caricamento vengono creati squadre, atleti e richieste; un foglio copiato dentro Excel viene ricondotto alla sua squadra, e un foglio che non corrisponde a nessuna squadra viene segnalato prima di crearne una nuova.</p>
     <p>Gli altri quattro fogli servono al caricamento iniziale e vanno caricati in quest'ordine: <b>Articoli e magazzino</b>, <b>Squadre e atleti</b>, <b>Divise da gara</b>, <b>Richieste</b>. Vengono scaricati già compilati con i dati presenti nel programma, con in fondo alcune colonne solo informative (per esempio consegnati, prenotati e magazzino finale per gli articoli, esito e numero proposto per le richieste), che al caricamento vengono ignorate. Il foglio <b>Movimenti</b> si scarica soltanto. Le colonne sono riconosciute dal titolo: un foglio con colonne mancanti o ripetute viene rifiutato.</p>
     <p>Le taglie devono corrispondere a quelle previste per l'articolo; negli articoli delle richieste si può indicare il nome, il codice o il nome visualizzato. Il caricamento aggiunge soltanto: i dati già presenti non vengono modificati, il caricamento ripetuto dello stesso file non crea duplicati e non ricrea le richieste già consegnate.</p>
-    <p>Nei fogli scaricati, le colonne con valori prestabiliti hanno un <b>menu a tendina</b>: le risposte e le taglie del modulo di distribuzione, sì/no, il tipo di lotto, le squadre. Il foglio <i>Istruzioni</i> descrive ogni colonna.</p>
+    <p>Nei fogli scaricati ogni casella è guidata: selezionandola, Excel mostra cosa inserire. Le colonne con valori prestabiliti hanno un <b>menu a tendina</b> (risposte, taglie, squadre, lotti, articoli, cognomi e nomi degli atleti già caricati, sì/no); i numeri accettano solo interi nell'intervallo previsto. In alto, le colonne <i>da compilare</i> sono separate da quelle <i>solo informative</i>, in grigio; le obbligatorie hanno il titolo più scuro. Il foglio <i>Istruzioni</i> descrive ogni colonna.</p>
     <p>Prima di caricare, il programma controlla ogni riga e mostra un riepilogo: cosa verrà aggiunto, cosa verrà ignorato perché già presente, le squadre e i lotti nuovi e le righe con errori, che non vengono caricate (per esempio un valore non ammesso, una taglia che Excel ha trasformato in data, un numero di maglia fuori dall'intervallo 0–99, un atleta o un articolo inesistente). Segnala inoltre, come avvisi, le situazioni da verificare: righe ripetute, giacenze diverse da quelle nel programma, numeri di maglia già in uso nella squadra, note che sembrano contenere recapiti (che non vengono caricate). Errori e avvisi dell'ultimo caricamento restano elencati in Impostazioni.</p>`)}
 
   ${sezione('Lista di squadra',`
@@ -3002,11 +3002,33 @@ function guidaPerExcel(righe){
     aggiungi('testo',t)});
   return out.map(x=>x?[x.tipo,...x.parti].join('\t'):'');
 }
-/* I menu a tendina di un foglio: per ogni colonna i valori fra cui scegliere,
-   oppure null. `libero` lascia scrivere anche altro (una squadra nuova). */
+/* Come si compila ogni colonna di un foglio: chi riempie il file va guidato
+   casella per casella, non lasciato a indovinare. Per ogni colonna:
+     valori      menu a tendina (con `libero` si puo' scrivere anche altro,
+                 per esempio una squadra nuova: Excel avvisa ma accetta)
+     intero      [minimo, massimo]: solo numeri interi
+     lunghezza   al massimo tanti caratteri
+     aiuto       il messaggio che Excel mostra selezionando la casella
+   Le colonne obbligatorie (m.obbligatorie) hanno il titolo piu' scuro e
+   l'aiuto comincia con "Obbligatoria"; le informative sono grigie. Gli
+   elenchi lunghi (cognomi, articoli) finiscono in un foglio nascosto. */
 const SI_NO={valori:['sì','no']};
-function menuColonne(colonne,perNome){return colonne.map(c=>perNome[c]||null)}
+const NOTE_LIBERE={lunghezza:200,aiuto:'Facoltativo. Non inserire recapiti (email, telefoni) né dati medici.'};
 const nomiSquadre=D=>(D.set.squadre||[]).map(x=>x.nome);
+const elencoOrdinato=v=>[...new Set(v.filter(Boolean).map(x=>String(x).trim()))].sort((a,b)=>norm(a).localeCompare(norm(b)));
+const cognomiAtleti=()=>elencoOrdinato(Object.values(S.atlete).map(a=>a.cognome));
+const nomiAtleti=()=>elencoOrdinato(Object.values(S.atlete).map(a=>a.nome));
+const taglieDi=arts=>[...new Set(arts.flatMap(a=>(a.taglie||[]).filter(Boolean)))].sort((a,b)=>szIdx(a)-szIdx(b)||String(a).localeCompare(String(b)));
+const INFORMATIVA={informativa:true,aiuto:'Colonna solo informativa: al caricamento viene ignorata.'};
+const GRUPPO_DATI='Da compilare',GRUPPO_INFO='Solo informative: ignorate al caricamento';
+function guidaColonne(m,D){
+  const g=m.guida?m.guida(D):{};const obbl=new Set(m.obbligatorie||[]);
+  return [...m.colonne.map(c=>{const x={...(g[c]||{})};
+      if(obbl.has(c)){x.obbligatoria=true;x.aiuto='Obbligatoria. '+(x.aiuto||'')}
+      return x}),
+    ...(m.info||[]).map(()=>INFORMATIVA)];
+}
+const gruppiColonne=m=>[...m.colonne.map(()=>GRUPPO_DATI),...(m.info||[]).map(()=>GRUPPO_INFO)];
 
 const MODELLI_EXCEL={
  articoli:{
@@ -3014,7 +3036,13 @@ const MODELLI_EXCEL={
   foglio:'Articoli',
   colonne:['Articolo','Ha un numero','Taglia','Quantità','Codice','Stagione'],
   info:['Codice taglia','Nome visualizzato','Consegnati','Prenotati','Ordinati','Magazzino finale'],
-  menu:()=>({'Ha un numero':SI_NO}),
+  guida:D=>({
+   Articolo:{lunghezza:60,aiuto:'Il nome dell\'articolo, per esempio TEE NERA ALLENAMENTO. Una riga per ogni taglia; le righe dello stesso articolo vanno vicine.'},
+   'Ha un numero':{...SI_NO,aiuto:'sì solo per le divise da gara con il numero stampato; per tutto il resto no, oppure vuoto.'},
+   Taglia:{valori:[...taglieDi(D.set.articoli||[]).filter(t=>t!=='UNICA'),'UNICA'],libero:true,aiuto:'Dal menu. UNICA per borsoni, sacche e borracce. Una taglia nuova si può scrivere.'},
+   Quantità:{intero:[0,100000],aiuto:'I pezzi presenti ora in magazzino, numero intero. Per le divise con il numero resta vuota: si caricano con il foglio Divise.'},
+   Codice:{lunghezza:12,aiuto:'Facoltativo: il codice corto (A001), solo lettere e cifre. Se manca lo assegna il programma.'},
+   Stagione:{valori:elencoOrdinato([D.set.stagione,...(D.set.articoli||[]).map(a=>a.stagione)]),libero:true,aiuto:'Facoltativo: la stagione dell\'articolo, per esempio 2026/27.'}}),
   obbligatorie:['Articolo','Taglia'],
   voci:{creati:['articolo nuovo','articoli nuovi'],aggiornati:['riga di magazzino nuova','righe di magazzino nuove']},
   istruzioni:[
@@ -3105,7 +3133,12 @@ const MODELLI_EXCEL={
   foglio:'Atleti',
   colonne:['Squadra','Cognome','Nome','Note','Attivo'],
   info:['Divise','In uscita','Gioca anche in'],
-  menu:D=>({Squadra:{valori:nomiSquadre(D),libero:true},Attivo:SI_NO}),
+  guida:D=>({
+   Squadra:{valori:nomiSquadre(D),libero:true,aiuto:'Dal menu. Una squadra nuova si può scrivere: viene creata al caricamento.'},
+   Cognome:{lunghezza:60,aiuto:'Il cognome dell\'atleta.'},
+   Nome:{lunghezza:60,aiuto:'Il nome dell\'atleta.'},
+   Note:NOTE_LIBERE,
+   Attivo:{...SI_NO,aiuto:'no per un atleta non attivo in questa stagione; altrimenti vuoto.'}}),
   obbligatorie:['Squadra','Cognome','Nome'],
   voci:{creati:['atleta nuovo','atleti nuovi']},
   istruzioni:[
@@ -3176,7 +3209,16 @@ const MODELLI_EXCEL={
   foglio:'Divise',
   colonne:['Modello','Taglia','Numero','Squadra','Cognome','Nome','Da cambiare','Note','Tipo'],
   info:['Stato','Prenotata per'],
-  menu:D=>({Modello:{valori:D.set.modelli||['STANDARD'],libero:true},Squadra:{valori:nomiSquadre(D),libero:true},'Da cambiare':SI_NO,Tipo:{valori:['gara','libero']}}),
+  guida:D=>({
+   Modello:{valori:D.set.modelli||['STANDARD'],libero:true,aiuto:'Il lotto della maglia, dal menu. Un nome nuovo crea un lotto nuovo.'},
+   Taglia:{valori:taglieDi((D.set.articoli||[]).filter(a=>a.conNumero)),libero:true,aiuto:'La taglia stampata sull\'etichetta, dal menu.'},
+   Numero:{intero:[0,99],aiuto:'Il numero stampato sulla maglia, da 0 a 99.'},
+   Squadra:{valori:nomiSquadre(D),aiuto:'Vuota se la maglia è in magazzino; altrimenti la squadra dell\'atleta che la tiene, dal menu.'},
+   Cognome:{valori:cognomiAtleti(),aiuto:'Vuoto se la maglia è in magazzino; altrimenti il cognome dell\'atleta, dal menu (atleti già caricati).'},
+   Nome:{valori:nomiAtleti(),aiuto:'Vuoto se la maglia è in magazzino; altrimenti il nome dell\'atleta, dal menu.'},
+   'Da cambiare':{...SI_NO,aiuto:'sì se l\'atleta la sta restituendo (taglia sbagliata, cambio squadra); altrimenti vuoto.'},
+   Note:{lunghezza:200,aiuto:'Facoltativo.'},
+   Tipo:{valori:['gara','libero'],aiuto:'Facoltativo, solo per un lotto nuovo: gara oppure libero.'}}),
   obbligatorie:['Taglia','Numero'],
   voci:{creati:['divisa nuova','divise nuove']},
   istruzioni:[
@@ -3276,7 +3318,15 @@ const MODELLI_EXCEL={
   foglio:'Richieste',
   colonne:['Squadra','Cognome','Nome','Articolo','Taglia','Numero desiderato','Note','Tipo di divisa'],
   info:['Esito','Numero proposto','Motivo'],
-  menu:D=>({Squadra:{valori:nomiSquadre(D)},Articolo:{valori:(D.set.articoli||[]).map(a=>a.nome)},'Tipo di divisa':{valori:['LIBERO']}}),
+  guida:D=>({
+   Squadra:{valori:nomiSquadre(D),aiuto:'La squadra dell\'atleta, dal menu.'},
+   Cognome:{valori:cognomiAtleti(),aiuto:'Il cognome dell\'atleta, dal menu (atleti già caricati).'},
+   Nome:{valori:nomiAtleti(),aiuto:'Il nome dell\'atleta, dal menu.'},
+   Articolo:{valori:elencoOrdinato((D.set.articoli||[]).map(a=>a.nome)),aiuto:'L\'articolo da consegnare, dal menu.'},
+   Taglia:{valori:[...taglieDi(D.set.articoli||[]).filter(t=>t!=='UNICA'),'UNICA'],aiuto:'Una delle taglie previste per l\'articolo, dal menu; UNICA per gli articoli senza taglie.'},
+   'Numero desiderato':{intero:[0,99],aiuto:'Solo per le divise, e solo se viene chiesto un numero preciso: da 0 a 99.'},
+   Note:NOTE_LIBERE,
+   'Tipo di divisa':{valori:['LIBERO'],aiuto:'Facoltativo: LIBERO per una maglia da libero; vuoto per la divisa della squadra.'}}),
   obbligatorie:['Squadra','Cognome','Nome','Articolo'],
   voci:{creati:['richiesta nuova','richieste nuove']},
   istruzioni:[
@@ -3414,12 +3464,15 @@ function modGruppi(D){
 /* I menu a tendina del modulo, colonna per colonna come modColonne: la
    risposta per ogni articolo e le sue taglie. */
 function modMenu(D){
-  const m=[null,null,null];
+  const m=[
+   {lunghezza:60,aiuto:'Già compilato per gli atleti presenti. Per un atleta nuovo: una riga in fondo, con cognome e nome.'},
+   {lunghezza:60,aiuto:'Il nome dell\'atleta.'},
+   {intero:[0,99],aiuto:'Il numero di maglia attuale, non quello richiesto: da 0 a 99.'}];
   for(const a of modArticoli(D)){
-    m.push({valori:MOD_RISPOSTE});
-    if(modConTaglie(a))m.push({valori:(a.taglie||[]).filter(Boolean)});
+    m.push({valori:MOD_RISPOSTE,aiuto:'ce l’ho, mi manca oppure da cambiare, dal menu. La casella vuota vale «ce l’ho».'});
+    if(modConTaglie(a))m.push({valori:(a.taglie||[]).filter(Boolean),aiuto:'La taglia da consegnare, dal menu: va indicata per «mi manca» e «da cambiare».'});
   }
-  m.push(null);
+  m.push(NOTE_LIBERE);
   return m;
 }
 
@@ -3536,7 +3589,7 @@ async function caricaModulo(){
   for(const n of nomiSq)perFoglio[KEY(n)]=perFoglio[KEY(n)]||n;
   const squadreNuove=new Set();
   for(const [nomeFoglio,righe] of fogli){
-    if(KEY(nomeFoglio)===KEY('Istruzioni')||!righe.length)continue;
+    if(KEY(nomeFoglio)===KEY('Istruzioni')||KEY(nomeFoglio)===KEY('Elenchi')||!righe.length)continue;
     // Un foglio copiato dentro Excel si chiama "U14 (2)": e' la stessa squadra.
     let squadra=perFoglio[KEY(nomeFoglio)]||perFoglio[KEY(String(nomeFoglio).replace(/\s*\(\d+\)\s*$/,''))];
     if(!squadra){squadra=String(nomeFoglio).trim().toUpperCase();squadreNuove.add(squadra)}
@@ -3719,7 +3772,7 @@ async function scaricaModello(tipo){
     if(!dove)return;
     const colonne=[...m.colonne,...(m.info||[])];
     await window.__APP.scriviExcel(dove,m.foglio,colonne,m.righe().map(r=>r.map(c=>c==null?'':String(c))),guidaPerExcel(m.istruzioni),
-      m.menu?menuColonne(colonne,m.menu(derive())):null);
+      guidaColonne(m,derive()),gruppiColonne(m));
     toast('Foglio salvato');
   }catch(e){toast('Scrittura del file non riuscita: '+e)}
 }

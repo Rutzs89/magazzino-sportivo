@@ -432,7 +432,34 @@ const carica = async (tipo, righe) => {
     ok(JSON.stringify(menuDi(div, "Da cambiare").valori) === '["sì","no"]' &&
        JSON.stringify(menuDi(div, "Tipo").valori) === '["gara","libero"]' && menuDi(div, "Modello").libero === true,
       "foglio Divise: menu per Da cambiare, Tipo e Modello (questo accetta anche un lotto nuovo)");
-    ok(!menuDi(div, "Numero") && !menuDi(div, "Note"), "le colonne da scrivere liberamente restano senza menu");
+    ok(JSON.stringify(menuDi(div, "Numero").intero) === "[0,99]" && menuDi(div, "Note").lunghezza === 200 && !menuDi(div, "Note").valori.length,
+      "foglio Divise: il numero accetta solo interi da 0 a 99, le note hanno un limite di lunghezza");
+    // ogni casella di ogni foglio e' guidata: un messaggio d'aiuto per ogni colonna
+    const senzaAiuto = tutti.flatMap((f) => f.intestazioni.filter((t, k) => !(f.menu && f.menu[k] && f.menu[k].aiuto)).map((t) => f.nome || f.foglio + ": " + t));
+    ok(senzaAiuto.length === 0, "ogni colonna di ogni foglio ha il suo messaggio d'aiuto" + (senzaAiuto.length ? ": mancano " + senzaAiuto.slice(0, 5).join(", ") : ""));
+    ok(tutti.every((f) => (f.menu || []).every((m) => !m || m.aiuto.length <= 255)), "nessun messaggio d'aiuto supera il limite di Excel (255 caratteri)");
+    // obbligatorie e informative
+    const art = fogli[TIPI.indexOf("articoli")];
+    ok(menuDi(art, "Articolo").obbligatoria && /^Obbligatoria/.test(menuDi(art, "Articolo").aiuto) && !menuDi(art, "Codice").obbligatoria,
+      "le colonne obbligatorie sono segnate come tali");
+    ok(fogli.every((f) => f.gruppi && f.gruppi.length === f.intestazioni.length &&
+      f.intestazioni.every((t, k) => (f.menu[k].informativa ? f.gruppi[k] !== f.gruppi[0] : f.gruppi[k] === f.gruppi[0]))),
+      "ogni foglio ha sopra i titoli il gruppo: da compilare oppure solo informative");
+    // cognomi e articoli: menu con gli atleti e gli articoli gia' caricati
+    const ric = fogli[TIPI.indexOf("richieste")];
+    ok(menuDi(ric, "Cognome").valori.length > 20 && menuDi(ric, "Articolo").valori.length === w.eval("S.settings.articoli.length"),
+      "foglio Richieste: cognomi e articoli si scelgono dal menu");
+    // il foglio si rilegge anche con i gruppi sopra i titoli (come esce da Excel)
+    {
+      const f = fogli[TIPI.indexOf("atlete")];
+      const sopra = f.gruppi.map((g, k) => (k > 0 && f.gruppi[k - 1] === g ? "" : g));
+      daLeggere = [sopra, f.intestazioni, ...f.righe];
+      const prima = conta();
+      await w.eval("caricaModello('atlete')");
+      await attendi(600);
+      ok(JSON.stringify(conta()) === JSON.stringify(prima) && !(w.eval("S.app.esitoExcel") || {}).problemi?.length,
+        "il foglio con l'intestazione su due righe si ricarica senza errori e senza doppioni");
+    }
     // ogni valore dei menu viene poi accettato al caricamento
     ok(w.eval("['sì','no'].every(siNoValido)"), "sì e no del menu sono valori ammessi");
     const f0m = modulo.scritto.fogli[0];
@@ -448,7 +475,8 @@ const carica = async (tipo, righe) => {
         a.taglie.every((t) => w.eval(`tagliaArticolo((derive().set.articoli||[]).find(x=>x.nome===${JSON.stringify(a.nome)}),${JSON.stringify(t)})`));
     });
     ok(taglieOk, "modulo: la colonna Taglia ha il menu con le taglie dell'articolo, tutte accettate");
-    ok(!menuDi(f0m, "Cognome") && !menuDi(f0m, "Note"), "modulo: nomi e note restano da scrivere");
+    ok(!menuDi(f0m, "Cognome").valori.length && menuDi(f0m, "Note").lunghezza === 200 && JSON.stringify(menuDi(f0m, "Numero maglia").intero) === "[0,99]",
+      "modulo: nomi e note restano da scrivere, il numero di maglia solo da 0 a 99");
     const guide = [...fogli.map((f) => f.istruzioni), modulo.scritto.istruzioni];
     const TIPI_RIGA = ["titolo", "sezione", "voce", "testo"];
     const guideOk = guide.every((g) => g[0].startsWith("titolo\t") && g.every((r) => {

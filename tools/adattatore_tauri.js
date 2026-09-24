@@ -363,7 +363,7 @@
     },
     /* La parte Rust vuole solo testo: un numero in una casella faceva
        rifiutare tutto il file, in silenzio. Qui si converte ogni casella. */
-    scriviExcel: function (percorso, foglio, intestazioni, righe, istruzioni, menu) {
+    scriviExcel: function (percorso, foglio, intestazioni, righe, istruzioni, menu, gruppi) {
       return invoke("scrivi_excel", {
         percorso: percorso,
         foglio: testo(foglio),
@@ -371,6 +371,7 @@
         righe: tabellaDiTesto(righe),
         istruzioni: (istruzioni || []).map(testo),
         menu: menu ? menu.map(menuDiTesto) : null,
+        gruppi: gruppi ? gruppi.map(testo) : null,
       });
     },
     leggiExcel: function (percorso) {
@@ -407,10 +408,20 @@
   function testo(v) {
     return v == null ? "" : String(v);
   }
-  /** Un menu a tendina: i valori come testo, oppure null per nessun menu. */
+  /** La guida di una colonna (menu, numeri interi, lunghezza, aiuto), con i
+      tipi che la parte Rust si aspetta; null per nessuna guida. */
   function menuDiTesto(m) {
-    if (!m || !m.valori) return null;
-    return { valori: m.valori.map(testo), libero: !!m.libero };
+    if (!m) return null;
+    var intero = m.intero && m.intero.length === 2 ? [Math.round(Number(m.intero[0])), Math.round(Number(m.intero[1]))] : null;
+    return {
+      valori: (m.valori || []).map(testo),
+      libero: !!m.libero,
+      intero: intero,
+      lunghezza: m.lunghezza ? Math.round(Number(m.lunghezza)) : null,
+      aiuto: testo(m.aiuto),
+      obbligatoria: !!m.obbligatoria,
+      informativa: !!m.informativa,
+    };
   }
   function tabellaDiTesto(righe) {
     return (righe || []).map(function (r) {

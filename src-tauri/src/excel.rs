@@ -7,18 +7,116 @@
 
 use calamine::{Data, Reader, Xlsx, open_workbook};
 use rust_xlsxwriter::{
-    DataValidation, DataValidationErrorStyle, Format, FormatAlign, FormatBorder, Workbook,
-    Worksheet,
+    column_number_to_name, DataValidation, DataValidationErrorStyle, DataValidationRule, Format,
+    FormatAlign, FormatBorder, Formula, Workbook, Worksheet,
 };
 
-/// Il menu a tendina di una colonna: i valori fra cui scegliere. Con `libero`
-/// si puo' scrivere anche altro (per esempio una squadra nuova): Excel lo
-/// segnala ma lo accetta. Quali valori e perche' lo decide l'app.
+/// Come si compila una colonna. Tutto lo decide l'app; qui si traduce in
+/// regole di Excel:
+/// - `valori`: menu a tendina. Con `libero` si puo' scrivere anche altro (una
+///   squadra nuova): Excel lo segnala ma lo accetta;
+/// - `intero`: [minimo, massimo], solo numeri interi;
+/// - `lunghezza`: al massimo tanti caratteri;
+/// - `aiuto`: il messaggio che Excel mostra selezionando la casella;
+/// - `obbligatoria` e `informativa` cambiano il colore del titolo; una
+///   colonna informativa ha anche le caselle in grigio.
 #[derive(serde::Deserialize, Clone, Default)]
 pub struct Menu {
+    #[serde(default)]
     pub valori: Vec<String>,
     #[serde(default)]
     pub libero: bool,
+    #[serde(default)]
+    pub intero: Option<(i32, i32)>,
+    #[serde(default)]
+    pub lunghezza: Option<u32>,
+    #[serde(default)]
+    pub aiuto: String,
+    #[serde(default)]
+    pub obbligatoria: bool,
+    #[serde(default)]
+    pub informativa: bool,
+}
+
+/// Il foglio nascosto con gli elenchi troppo lunghi per stare dentro la regola
+/// (Excel accetta al massimo 255 caratteri): una colonna per elenco.
+const ELENCHI: &str = "Elenchi";
+
+fn taglia(testo: &str, massimo: usize) -> String {
+    testo.chars().take(massimo).collect()
+}
+
+/// La regola di Excel per una colonna, se ne serve una.
+fn regola(m: &Menu, titolo: &str, elenchi: &mut Vec<Vec<String>>) -> Result<Option<DataValidation>, String> {
+    let e = |x: rust_xlsxwriter::XlsxError| x.to_string();
+    let valori: Vec<&str> = m.valori.iter().map(|v| v.as_str()).filter(|v| !v.is_empty()).collect();
+    let (mut r, errore) = if !valori.is_empty() {
+        let lungo = valori.iter().map(|v| v.chars().count() + 1).sum::<usize>() > 255
+            || valori.iter().any(|v| v.contains(','));
+        let r = if lungo {
+            elenchi.push(valori.iter().map(|v| v.to_string()).collect());
+            let c = column_number_to_name((elenchi.len() - 1) as u16);
+            DataValidation::new().allow_list_formula(Formula::new(format!(
+                "={ELENCHI}!${c}$1:${c}${}",
+                valori.len()
+            )))
+        } else {
+            DataValidation::new().allow_list_strings(&valori).map_err(e)?
+        };
+        let errore = if m.libero {
+            "Il valore non è fra quelli del menu. Confermare solo se è voluto."
+        } else {
+            "Scegliere un valore dal menu a tendina, oppure lasciare la casella vuota."
+        };
+        (r, errore.to_string())
+    } else if let Some((minimo, massimo)) = m.intero {
+        (
+            DataValidation::new().allow_whole_number(DataValidationRule::Between(minimo, massimo)),
+            format!("Serve un numero intero da {minimo} a {massimo}."),
+        )
+    } else if let Some(n) = m.lunghezza {
+        (
+            DataValidation::new().allow_text_length(DataValidationRule::LessThanOrEqualTo(n)),
+            format!("Al massimo {n} caratteri."),
+        )
+    } else if !m.aiuto.is_empty() {
+        (DataValidation::new().allow_any_value(), String::new())
+    } else {
+        return Ok(None);
+    };
+    if !errore.is_empty() {
+        r = if m.libero {
+            r.set_error_style(DataValidationErrorStyle::Information)
+                .set_error_title("Valore non in elenco")
+        } else {
+            r.set_error_title("Valore non ammesso")
+        }
+        .and_then(|r| r.set_error_message(&errore))
+        .map_err(e)?;
+    }
+    if !m.aiuto.is_empty() {
+        r = r
+            .set_input_title(taglia(titolo, 32))
+            .and_then(|r| r.set_input_message(taglia(&m.aiuto, 255)))
+            .map_err(e)?;
+    }
+    Ok(Some(r))
+}
+
+/// Il foglio nascosto degli elenchi lunghi, se ne e' servito uno.
+fn scrivi_elenchi(libro: &mut Workbook, elenchi: &[Vec<String>]) -> Result<(), String> {
+    if elenchi.is_empty() {
+        return Ok(());
+    }
+    let foglio = libro.add_worksheet();
+    foglio.set_name(ELENCHI).map_err(|e| e.to_string())?;
+    for (c, valori) in elenchi.iter().enumerate() {
+        for (r, v) in valori.iter().enumerate() {
+            foglio.write_string(r as u32, c as u16, v).map_err(|e| e.to_string())?;
+        }
+    }
+    foglio.set_hidden(true);
+    Ok(())
 }
 
 /// Quante righe sotto quelle scritte hanno ancora il menu: chi compila
@@ -44,23 +142,44 @@ fn scrivi_dati(
     gruppi: &[String],
     righe: &[Vec<String>],
     menu: &[Option<Menu>],
+    elenchi: &mut Vec<Vec<String>>,
 ) -> Result<u32, String> {
+    let guida = |c: usize| menu.get(c).and_then(|m| m.as_ref());
+    let informativa = |c: usize| guida(c).is_some_and(|m| m.informativa);
+    let obbligatoria = |c: usize| guida(c).is_some_and(|m| m.obbligatoria);
+    let grigio_titolo = Format::new()
+        .set_bold()
+        .set_italic()
+        .set_font_color(0x595959)
+        .set_background_color(0xD9D9D9)
+        .set_border(FormatBorder::Thin)
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::VerticalCenter)
+        .set_text_wrap();
+    let grigio_cella = Format::new().set_background_color(0xEFEFEF).set_font_color(0x595959);
     let grassetto = intestazione();
     // Le colonne con il menu sono di testo: una taglia 5-6 scelta dal menu
     // non deve diventare una data.
     let testo = Format::new().set_num_format("@");
     let due = gruppi.iter().any(|g| !g.trim().is_empty());
     let alte: u32 = if due { 2 } else { 1 };
-    let larghezza = |titolo: &str, gruppo: &str, colonne: usize| {
+    // Il testo piu' lungo di ogni colonna, fino a 40 caratteri: la colonna
+    // si allarga su quello, non solo sul titolo.
+    let contenuto: Vec<usize> = (0..intestazioni.len())
+        .map(|c| righe.iter().map(|r| r.get(c).map_or(0, |v| v.chars().count())).max().unwrap_or(0).min(40))
+        .collect();
+    let larghezza = |c: usize, titolo: &str, gruppo: &str, colonne: usize| {
         let per_gruppo = (gruppo.chars().count() as f64 / colonne.max(1) as f64).ceil() + 3.0;
-        (titolo.chars().count() as f64 + 3.0).max(per_gruppo).max(11.0)
+        let dentro = contenuto.get(c).copied().unwrap_or(0) as f64 + 2.0;
+        (titolo.chars().count() as f64 + 3.0).max(per_gruppo).max(dentro).max(11.0)
     };
     if !due {
         for (c, titolo) in intestazioni.iter().enumerate() {
-            dati.write_string_with_format(0, c as u16, titolo, &grassetto)
+            let f = if informativa(c) { &grigio_titolo } else { &grassetto };
+            dati.write_string_with_format(0, c as u16, titolo, f)
                 .map_err(|e| e.to_string())?;
             // Larghezza a occhio sul titolo: meglio che vedere "####" ovunque.
-            dati.set_column_width(c as u16, larghezza(titolo, "", 1))
+            dati.set_column_width(c as u16, larghezza(c, titolo, "", 1))
                 .map_err(|e| e.to_string())?;
         }
     } else {
@@ -81,6 +200,8 @@ fn scrivi_dati(
             centro(Format::new().set_background_color(0xFBEBB5)),
             centro(Format::new().set_background_color(0xFDF5DA)),
         ];
+        // le colonne obbligatorie hanno il titolo di sotto piu' scuro
+        let sotto_obbligatoria = centro(Format::new().set_background_color(0xF2C230));
         let n = intestazioni.len();
         let gruppo = |c: usize| gruppi.get(c).map(|g| g.trim()).unwrap_or("");
         let (mut c, mut alterna) = (0usize, 0usize);
@@ -89,7 +210,7 @@ fn scrivi_dati(
             if g.is_empty() {
                 dati.merge_range(0, c as u16, 1, c as u16, &intestazioni[c], &singola)
                     .map_err(|e| e.to_string())?;
-                dati.set_column_width(c as u16, larghezza(&intestazioni[c], "", 1))
+                dati.set_column_width(c as u16, larghezza(c, &intestazioni[c], "", 1))
                     .map_err(|e| e.to_string())?;
                 c += 1;
                 continue;
@@ -98,17 +219,26 @@ fn scrivi_dati(
             while fine + 1 < n && gruppo(fine + 1) == g {
                 fine += 1;
             }
+            let tutto_grigio = (c..=fine).all(|k| informativa(k));
+            let f_sopra = if tutto_grigio { &grigio_titolo } else { &sopra[alterna] };
             if fine > c {
-                dati.merge_range(0, c as u16, 0, fine as u16, g, &sopra[alterna])
+                dati.merge_range(0, c as u16, 0, fine as u16, g, f_sopra)
                     .map_err(|e| e.to_string())?;
             } else {
-                dati.write_string_with_format(0, c as u16, g, &sopra[alterna])
+                dati.write_string_with_format(0, c as u16, g, f_sopra)
                     .map_err(|e| e.to_string())?;
             }
             for k in c..=fine {
-                dati.write_string_with_format(1, k as u16, &intestazioni[k], &sotto[alterna])
+                let f_sotto = if informativa(k) {
+                    &grigio_titolo
+                } else if obbligatoria(k) {
+                    &sotto_obbligatoria
+                } else {
+                    &sotto[alterna]
+                };
+                dati.write_string_with_format(1, k as u16, &intestazioni[k], f_sotto)
                     .map_err(|e| e.to_string())?;
-                dati.set_column_width(k as u16, larghezza(&intestazioni[k], g, fine - c + 1))
+                dati.set_column_width(k as u16, larghezza(k, &intestazioni[k], g, fine - c + 1))
                     .map_err(|e| e.to_string())?;
             }
             alterna = 1 - alterna;
@@ -118,37 +248,40 @@ fn scrivi_dati(
     }
     for (r, riga) in righe.iter().enumerate() {
         for (c, cella) in riga.iter().enumerate() {
-            dati.write_string(r as u32 + alte, c as u16, cella)
+            let r = r as u32 + alte;
+            if informativa(c) {
+                match cella.trim().parse::<i32>() {
+                    Ok(n) => dati.write_number_with_format(r, c as u16, n, &grigio_cella),
+                    Err(_) => dati.write_string_with_format(r, c as u16, cella, &grigio_cella),
+                }
                 .map_err(|e| e.to_string())?;
+                continue;
+            }
+            // In una colonna di numeri interi il numero si scrive come numero:
+            // la regola di Excel lo controlla e non compare il triangolino
+            // verde del "numero salvato come testo".
+            if let (Some(m), Ok(n)) = (guida(c), cella.trim().parse::<i32>()) {
+                if m.intero.is_some() {
+                    dati.write_number(r, c as u16, n).map_err(|e| e.to_string())?;
+                    continue;
+                }
+            }
+            dati.write_string(r, c as u16, cella).map_err(|e| e.to_string())?;
         }
     }
     let ultima = righe.len() as u32 + alte - 1 + RIGHE_IN_PIU;
     for (c, m) in menu.iter().enumerate() {
         let Some(m) = m else { continue };
-        let valori: Vec<&str> = m.valori.iter().map(|v| v.as_str()).filter(|v| !v.is_empty()).collect();
-        if valori.is_empty() || c >= intestazioni.len() {
+        if c >= intestazioni.len() {
             continue;
         }
-        // Excel non accetta elenchi piu' lunghi di 255 caratteri: in quel caso
-        // la colonna resta senza menu, il controllo lo fa comunque il
-        // programma al caricamento.
-        let Ok(regola) = DataValidation::new().allow_list_strings(&valori) else {
+        let Some(r) = regola(m, &intestazioni[c], elenchi)? else {
             continue;
         };
-        let regola = (if m.libero {
-            regola
-                .set_error_style(DataValidationErrorStyle::Information)
-                .set_error_title("Valore non in elenco")
-                .and_then(|r| r.set_error_message("Il valore non è fra quelli del menu. Confermare solo se è voluto."))
-        } else {
-            regola
-                .set_error_title("Valore non ammesso")
-                .and_then(|r| r.set_error_message("Scegliere un valore dal menu a tendina, oppure lasciare la casella vuota."))
-        })
-        .map_err(|e| e.to_string())?;
-        dati.set_column_format(c as u16, &testo)
-            .map_err(|e| e.to_string())?;
-        dati.add_data_validation(alte, c as u16, ultima, c as u16, &regola)
+        if !m.valori.is_empty() {
+            dati.set_column_format(c as u16, &testo).map_err(|e| e.to_string())?;
+        }
+        dati.add_data_validation(alte, c as u16, ultima, c as u16, &r)
             .map_err(|e| e.to_string())?;
     }
     Ok(alte)
@@ -232,16 +365,26 @@ pub async fn scrivi_excel(
     righe: Vec<Vec<String>>,
     istruzioni: Vec<String>,
     menu: Option<Vec<Option<Menu>>>,
+    gruppi: Option<Vec<String>>,
 ) -> Result<(), String> {
     let mut libro = Workbook::new();
+    let mut elenchi = Vec::new();
 
     let dati = libro.add_worksheet();
     dati.set_name(&foglio).map_err(|e| e.to_string())?;
-    scrivi_dati(dati, &intestazioni, &[], &righe, &menu.unwrap_or_default())?;
-    // La prima riga resta ferma scorrendo: con centocinquanta atlete serve.
-    dati.set_freeze_panes(1, 0).map_err(|e| e.to_string())?;
+    let alte = scrivi_dati(
+        dati,
+        &intestazioni,
+        &gruppi.unwrap_or_default(),
+        &righe,
+        &menu.unwrap_or_default(),
+        &mut elenchi,
+    )?;
+    // L'intestazione resta ferma scorrendo: con centocinquanta atlete serve.
+    dati.set_freeze_panes(alte, 0).map_err(|e| e.to_string())?;
 
     scrivi_guida(&mut libro, &istruzioni)?;
+    scrivi_elenchi(&mut libro, &elenchi)?;
     libro.save(&percorso).map_err(|e| format!("Impossibile scrivere il file: {e}"))
 }
 
@@ -271,17 +414,19 @@ pub async fn scrivi_excel_fogli(
     istruzioni: Vec<String>,
 ) -> Result<(), String> {
     let mut libro = Workbook::new();
+    let mut elenchi = Vec::new();
 
     for foglio in &fogli {
         let dati = libro.add_worksheet();
         // Excel non accetta piu' di 31 caratteri, ne' : \ / ? * [ ]
         let nome = pulisci_nome(&foglio.nome);
         dati.set_name(&nome).map_err(|e| e.to_string())?;
-        let alte = scrivi_dati(dati, &foglio.intestazioni, &foglio.gruppi, &foglio.righe, &foglio.menu)?;
+        let alte = scrivi_dati(dati, &foglio.intestazioni, &foglio.gruppi, &foglio.righe, &foglio.menu, &mut elenchi)?;
         dati.set_freeze_panes(alte, 2).map_err(|e| e.to_string())?;
     }
 
     scrivi_guida(&mut libro, &istruzioni)?;
+    scrivi_elenchi(&mut libro, &elenchi)?;
     libro
         .save(&percorso)
         .map_err(|e| format!("Impossibile scrivere il file: {e}"))
@@ -402,6 +547,7 @@ mod prove {
             ],
             vec!["Istruzioni di prova".into()],
             None,
+            None,
         ))
         .expect("scrittura");
 
@@ -425,8 +571,8 @@ mod prove {
         b(scrivi_excel(
             p.clone(),
             "Divise".into(),
-            vec!["Taglia".into(), "Da cambiare".into(), "Modello".into()],
-            vec![vec!["5-6".into(), "sì".into(), "STANDARD".into()]],
+            vec!["Taglia".into(), "Da cambiare".into(), "Modello".into(), "Numero".into(), "Codice".into(), "Stato".into()],
+            vec![vec!["5-6".into(), "sì".into(), "STANDARD".into(), "8".into(), "A001".into(), "in uso".into()]],
             vec![
                 "titolo\tDIVISE".into(),
                 "".into(),
@@ -436,14 +582,26 @@ mod prove {
                 "una riga di prima, senza tipo".into(),
             ],
             Some(vec![
-                Some(Menu { valori: lungo, libero: false }),
-                Some(Menu { valori: vec!["sì".into(), "no".into()], libero: false }),
-                Some(Menu { valori: vec!["STANDARD".into(), "LIBERO".into()], libero: true }),
+                Some(Menu { valori: lungo, aiuto: "La taglia".into(), obbligatoria: true, ..Default::default() }),
+                Some(Menu { valori: vec!["sì".into(), "no".into()], ..Default::default() }),
+                Some(Menu { valori: vec!["STANDARD".into(), "LIBERO".into()], libero: true, ..Default::default() }),
+                Some(Menu { intero: Some((0, 99)), aiuto: "Numero di maglia".into(), ..Default::default() }),
+                Some(Menu { lunghezza: Some(12), ..Default::default() }),
+                Some(Menu { informativa: true, aiuto: "Solo informativa".into(), ..Default::default() }),
             ]),
+            Some(vec!["Da compilare".into(); 5].into_iter().chain(["Solo informative".into()]).collect()),
         ))
         .expect("scrittura con menu");
-        let righe = b(leggi_excel(p)).expect("lettura");
-        assert_eq!(righe[1], vec!["5-6", "sì", "STANDARD"]);
+        let righe = b(leggi_excel(p.clone())).expect("lettura");
+        // sopra i gruppi, sotto i titoli, poi i dati; il numero torna uguale
+        assert_eq!(righe[0][0], "Da compilare");
+        assert_eq!(righe[1][0], "Taglia");
+        assert_eq!(righe[2], vec!["5-6", "sì", "STANDARD", "8", "A001", "in uso"]);
+        // l'elenco lungo e' finito nel foglio nascosto, dopo le istruzioni
+        let fogli = b(leggi_excel_fogli(p)).expect("lettura dei fogli");
+        let nomi: Vec<&str> = fogli.iter().map(|f| f.0.as_str()).collect();
+        assert_eq!(nomi, vec!["Divise", "Istruzioni", "Elenchi"]);
+        assert_eq!(fogli[2].1.len(), 200);
         let _ = std::fs::remove_file(&f);
     }
 
@@ -482,7 +640,7 @@ mod prove {
     #[ignore]
     fn scrive_i_fogli_salvati() {
         #[derive(serde::Deserialize)]
-        struct Foglio { foglio: String, intestazioni: Vec<String>, righe: Vec<Vec<String>>, istruzioni: Vec<String>, menu: Option<Vec<Option<Menu>>> }
+        struct Foglio { foglio: String, intestazioni: Vec<String>, righe: Vec<Vec<String>>, istruzioni: Vec<String>, menu: Option<Vec<Option<Menu>>>, gruppi: Option<Vec<String>> }
         #[derive(serde::Deserialize)]
         struct Modulo { fogli: Vec<FoglioDati>, istruzioni: Vec<String> }
         #[derive(serde::Deserialize)]
@@ -491,7 +649,7 @@ mod prove {
         let t: Tutto = serde_json::from_str(&std::fs::read_to_string(dir.join("fogli.json")).unwrap()).unwrap();
         for f in t.fogli {
             let p = dir.join(format!("{}.xlsx", f.foglio.to_lowercase())).to_string_lossy().to_string();
-            b(scrivi_excel(p, f.foglio, f.intestazioni, f.righe, f.istruzioni, f.menu)).unwrap();
+            b(scrivi_excel(p, f.foglio, f.intestazioni, f.righe, f.istruzioni, f.menu, f.gruppi)).unwrap();
         }
         let p = dir.join("modulo.xlsx").to_string_lossy().to_string();
         b(scrivi_excel_fogli(p, t.modulo.fogli, t.modulo.istruzioni)).unwrap();
