@@ -363,13 +363,14 @@
     },
     /* La parte Rust vuole solo testo: un numero in una casella faceva
        rifiutare tutto il file, in silenzio. Qui si converte ogni casella. */
-    scriviExcel: function (percorso, foglio, intestazioni, righe, istruzioni) {
+    scriviExcel: function (percorso, foglio, intestazioni, righe, istruzioni, menu) {
       return invoke("scrivi_excel", {
         percorso: percorso,
         foglio: testo(foglio),
         intestazioni: (intestazioni || []).map(testo),
         righe: tabellaDiTesto(righe),
         istruzioni: (istruzioni || []).map(testo),
+        menu: menu ? menu.map(menuDiTesto) : null,
       });
     },
     leggiExcel: function (percorso) {
@@ -385,6 +386,8 @@
             nome: testo(f.nome),
             intestazioni: (f.intestazioni || []).map(testo),
             righe: tabellaDiTesto(f.righe),
+            menu: (f.menu || []).map(menuDiTesto),
+            gruppi: (f.gruppi || []).map(testo),
           };
         }),
         istruzioni: (istruzioni || []).map(testo),
@@ -403,6 +406,11 @@
 
   function testo(v) {
     return v == null ? "" : String(v);
+  }
+  /** Un menu a tendina: i valori come testo, oppure null per nessun menu. */
+  function menuDiTesto(m) {
+    if (!m || !m.valori) return null;
+    return { valori: m.valori.map(testo), libero: !!m.libero };
   }
   function tabellaDiTesto(righe) {
     return (righe || []).map(function (r) {

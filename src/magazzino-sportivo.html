@@ -143,12 +143,17 @@ a.item:hover{background:var(--bg)}
 .omonimo+.omonimo{margin-top:8px}
 .filters.corti>.btn{flex:0 0 auto}
 .soloInfo{opacity:.75}
+.testaLotto{flex-wrap:wrap;gap:6px 12px;align-items:center}
+.testaLotto .btn{margin-left:auto}
+.colonneSq{display:grid;grid-template-columns:repeat(auto-fill,minmax(11em,1fr));gap:2px 12px;margin-bottom:10px}
 .esitoTit{margin:14px 0 6px;font-size:15px}
 .esitoTit.bad{color:var(--bad)}
 .esitoLista{margin:0;padding-left:18px;max-height:34vh;overflow:auto;font-size:13.5px;line-height:1.45}
 .esitoLista li{margin:0 0 4px}
 /* Lo spazio dell'avviso del numero doppio c'e' sempre, anche vuoto: se no le
    squadre con l'avviso hanno le colonne spostate rispetto alle altre. */
+.campi.unaRiga select.inRiga.numeriCon{flex:0 0 17.5em;width:17.5em;max-width:17.5em}
+.campi.unaRiga select.inRiga.numeriCon.attivo{border-color:var(--blue);color:var(--blue)}
 .campi.unaRiga .slotAvviso{flex:0 0 9.5em;display:flex;overflow:hidden}
 .campi.unaRiga .slotAvviso .pill{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .filters.corti>input{flex:0 1 22em}
@@ -262,7 +267,7 @@ tr.conflitto th,tr.conflitto td{background:var(--bad-soft)}
 .sqRiga{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-top:10px}
 /* Finestra stretta: i pulsanti della squadra vanno su una seconda riga invece
    di schiacciare le caselle fino a sovrapporle. */
-@media(max-width:1180px){
+@media(max-width:1440px){
   .sqRiga{flex-wrap:wrap}
   .sqRiga>.main{flex:1 1 calc(100% - 40px);min-width:0}
   .sqRiga>.right{flex:1 1 100%;justify-content:flex-end;padding-top:2px}
@@ -549,6 +554,20 @@ const fmtDate=d=>{if(!d)return'';const [y,m,g]=String(d).split('-');return g?`${
 /* ============ motore ============ */
 let _D=null;
 function changed(){_D=null;schedule()}
+/* La serie di numeri di una squadra: la sua, oppure quella del gruppo di
+   squadre che condividono i numeri (campo gruppoNumeri, uguale su tutte). */
+const serieNumeri=(D,squadra)=>(D.gruppo&&D.gruppo[squadra])||('S:'+squadra);
+const stessaSerie=(D,a,b)=>serieNumeri(D,a)===serieNumeri(D,b);
+function squadreDellaSerie(D,squadra){const k=serieNumeri(D,squadra);return D.perServire.map(x=>x.nome).filter(n=>serieNumeri(D,n)===k)}
+function nomeSerie(D,squadra){const t=squadreDellaSerie(D,squadra);return t.length>1?t.map(teamLabel).join(' + '):teamLabel(squadra)}
+/* I numeri ripetuti, una volta per serie (non una per squadra del gruppo). */
+function doppioniPerSerie(D){
+  const out=[];const viste=new Set();
+  for(const sq of D.perServire){const k=serieNumeri(D,sq.nome);if(viste.has(k))continue;viste.add(k);
+    for(const [n,chi] of Object.entries(numeriDiSquadra(D,sq.nome)))if(chi.length>1)out.push({squadra:sq.nome,serie:nomeSerie(D,sq.nome),numero:n,chi})}
+  return out;
+}
+
 /* Le altre schede della stessa persona: chi gioca in due squadre ha una
    scheda per squadra, collegate dallo stesso campo `persona`. */
 function collegati(aid){
@@ -584,7 +603,7 @@ function numeroDaDare(D,squadra,aid,d){
   const n=Number(d.numero);
   if(d.holder===aid)return true;
   if((D.occ[squadra]||new Set()).has(n))return false;
-  const chi=D.riservati&&D.riservati[squadra]&&D.riservati[squadra].get(n);
+  const chi=D.riservati&&D.riservati[serieNumeri(D,squadra)]&&D.riservati[serieNumeri(D,squadra)].get(n);
   return !chi||chi===aid||d.holder===chi;
 }
 /* Le maglie dell'atleta il cui numero, in un'altra squadra, e' gia' di
@@ -592,9 +611,9 @@ function numeroDaDare(D,squadra,aid,d){
 function maglieInConflitto(aid,squadra){
   const D=derive();const occ=D.occ[squadra]||new Set();
   return (D.perAtleta[aid]||[]).map(id=>[id,S.divise[id]])
-    .filter(([,d])=>d&&!d.daRestituire&&!D.comuni.has(d.modello||'STANDARD')&&occ.has(Number(d.numero))
+    .filter(([,d])=>d&&!d.daRestituire&&occ.has(Number(d.numero))
       &&Object.values(S.divise).some(x=>x!==d&&!x.dismessa&&x.holder&&x.holder!==aid&&!x.daRestituire
-        &&S.atlete[x.holder]&&S.atlete[x.holder].squadra===squadra&&Number(x.numero)===Number(d.numero)));
+        &&S.atlete[x.holder]&&stessaSerie(D,S.atlete[x.holder].squadra,squadra)&&Number(x.numero)===Number(d.numero)));
 }
 /* Prima di spostare un'atleta in un'altra squadra: se il suo numero li' e'
    gia' preso, lo si dice e, confermando, la sua maglia viene segnata da
@@ -606,16 +625,21 @@ async function preparaSpostamento(aid,squadra){
   return w(async()=>{for(const [id] of c)await S.db.doc('divise/'+id).update({daRestituire:true})});
 }
 
+/* Il tipo di un lotto: "gara" (la divisa della squadra) o "libero" (la maglia
+   da libero). Sta in settings.tipiLotto; per gli archivi di prima vale la
+   vecchia lista dei lotti comuni, che erano i liberi. */
+function tipoLotto(m){
+  m=m||'STANDARD';const set=S.settings||{};
+  const t=(set.tipiLotto||{})[m];if(t)return t;
+  return (set.modelliComuni||['LIBERO']).includes(m)?'libero':'gara';
+}
+const TIPI_MAGLIA={gara:'divisa da gara',libero:'maglia da libero'};
 /* La maglia che l'atleta sta cambiando e da cui eredita il numero, per una
-   richiesta di quel lotto. I liberi si cambiano solo con liberi; le divise da
-   gara fra loro, qualunque lotto. */
+   richiesta di quel lotto: dello stesso tipo, qualunque lotto sia (chi cambia
+   squadra cambia anche lotto, e tiene il numero). */
 function mieiDaCambiare(aid,mod){
-  const comuni=new Set((S.settings&&S.settings.modelliComuni)||['LIBERO']);
-  const comuneOra=comuni.has(mod);
-  return Object.values(S.divise).find(d=>{
-    if(d.dismessa||d.holder!==aid||!d.daRestituire)return false;
-    const m=d.modello||'STANDARD';
-    return (comuneOra||comuni.has(m))?m===mod:true})||null;
+  const t=tipoLotto(mod);
+  return Object.values(S.divise).find(d=>!d.dismessa&&d.holder===aid&&d.daRestituire&&tipoLotto(d.modello)===t)||null;
 }
 function derive(){
   if(_D)return _D;
@@ -629,23 +653,36 @@ function derive(){
   const perServire=[...squadreOrd].sort((a,b)=>prio(a)-prio(b)||norm(a.nome).localeCompare(norm(b.nome)));
   perServire.forEach((s,i)=>{teamIdx[s.nome]=i});
   squadreOrd.forEach(s=>{includi[s.nome]=s.includi!==false;lotto[s.nome]=s.modelloDivisa||'STANDARD'});
-  // I modelli comuni (le maglie da libero) sono uguali per tutta la societa':
-  // chi li chiede pesca dallo stesso mucchio, qualunque squadra sia. Gli altri
-  // modelli invece dipendono dalla squadra, che ha il suo lotto di divise da gara.
-  const comuni=new Set(set.modelliComuni||['LIBERO']);
-  const modelloPer=r=>{const c=r.modello||'';if(comuni.has(c))return c;
-    const a=S.atlete[r.atletaId];return (a&&lotto[a.squadra])||'STANDARD'};
+  // Le squadre che condividono i numeri hanno la stessa serie.
+  const gruppo={};for(const s of set.squadre||[])if(s.gruppoNumeri)gruppo[s.nome]='G:'+s.gruppoNumeri;
+  const serie=t=>gruppo[t]||('S:'+t);
+  // Ogni squadra ha un lotto per tipo di maglia: le divise da gara e le
+  // maglie da libero. Una richiesta dice il tipo (vuoto = divisa della
+  // squadra, un lotto da libero = maglia da libero) e il lotto lo decide la
+  // squadra dell'atleta.
+  const lottiLibero=(set.modelli||[]).filter(m=>tipoLotto(m)==='libero');
+  if(!lottiLibero.length)lottiLibero.push('LIBERO');
+  const comuni=new Set(lottiLibero); // tutti i lotti da libero (nome storico)
+  const liberoDi={};
+  squadreOrd.forEach(s=>{liberoDi[s.nome]=s.modelloLibero&&lottiLibero.includes(s.modelloLibero)?s.modelloLibero:lottiLibero[0]});
+  const modelloPer=r=>{const c=r.modello||'';const a=S.atlete[r.atletaId];
+    if(c&&tipoLotto(c)==='libero')return (a&&liberoDi[a.squadra])||lottiLibero[0];
+    return (a&&lotto[a.squadra])||'STANDARD'};
   const art={};(set.articoli||[]).forEach(a=>art[a.nome]=a);
   const conNumero=a=>!!(art[a]&&art[a].conNumero);
 
   // divise per atleta, numeri occupati per squadra
-  const perAtleta={},occ={};
+  const perAtleta={},occ={},occS={};
   for(const [id,d] of Object.entries(S.divise)){
     if(d.dismessa)continue;
     if(d.holder){(perAtleta[d.holder]=perAtleta[d.holder]||[]).push(id);
       if(!d.daRestituire){const t=S.atlete[d.holder]&&S.atlete[d.holder].squadra;
-        if(t){(occ[t]=occ[t]||new Set()).add(Number(d.numero))}}}
+        if(t){(occS[serie(t)]=occS[serie(t)]||new Set()).add(Number(d.numero))}}}
   }
+  // Ogni squadra vede la serie intera: le squadre di un gruppo condividono lo
+  // stesso insieme di numeri occupati.
+  for(const t of new Set([...(set.squadre||[]).map(x=>x.nome),...Object.values(S.atlete).map(a=>a.squadra)]))
+    occ[t]=occS[serie(t)]||(occS[serie(t)]=new Set());
   // giacenze materiale
   const stock={};const key=(a,t)=>a+'|'+t;
   const st=k=>stock[k]||(stock[k]={iniziale:0,carichi:0,consegne:0,rientri:0,ordinati:0});
@@ -671,7 +708,7 @@ function derive(){
   // Chi gioca in due squadre riceve il materiale una volta sola: qui si segna
   // chi, fra le sue schede, lo sta gia' ricevendo.
   const perPersona={};
-  const occW={};for(const t in occ)occW[t]=new Set(occ[t]);
+  const occW={};const cloni={};for(const t in occ){const k=serie(t);occW[t]=cloni[k]||(cloni[k]=new Set(occ[t]))}
   // Il numero di chi sta cambiando maglia resta suo finche' ha una richiesta
   // aperta: se no una compagna che viene prima in elenco se lo prende, e per
   // qualche giorno in squadra ci sono due maglie con lo stesso numero.
@@ -679,7 +716,7 @@ function derive(){
   for(const r of Object.values(S.richieste)){
     const a=S.atlete[r.atletaId];if(!a||a.inUscita||a.attiva===false||!conNumero(r.articolo))continue;
     const own=mieiDaCambiare(r.atletaId,modelloPer(r));
-    if(own)(riservati[a.squadra]=riservati[a.squadra]||new Map()).set(Number(own.numero),r.atletaId);
+    if(own)(riservati[serie(a.squadra)]=riservati[serie(a.squadra)]||new Map()).set(Number(own.numero),r.atletaId);
   }
   const reqs=Object.entries(S.richieste).sort((a,b)=>{
     const ra=a[1],rb=b[1];const aa=S.atlete[ra.atletaId],ab=S.atlete[rb.atletaId];
@@ -699,7 +736,7 @@ function derive(){
     if(conNumero(r.articolo)){
       const o=occW[a.squadra]||(occW[a.squadra]=new Set());
       const mod=modelloPer(r);
-      const ris=riservati[a.squadra];
+      const ris=riservati[serie(a.squadra)];
       const cand=avail.filter(([id,d])=>{
         if(taken.has(id)||d.taglia!==r.taglia||(d.modello||'STANDARD')!==mod||o.has(Number(d.numero)))return false;
         // La maglia che lei stessa sta restituendo non e' una consegna.
@@ -726,7 +763,7 @@ function derive(){
         const scambio=cand.find(([id,d])=>{
           if(!d.holder||!d.daRestituire)return false;
           const compagna=S.atlete[d.holder];
-          return compagna&&compagna.squadra===a.squadra&&d.holder!==r.atletaId});
+          return compagna&&serie(compagna.squadra)===serie(a.squadra)&&d.holder!==r.atletaId});
         if(scambio){pick=scambio;motivo=`Scambio dentro ${teamLabel(a.squadra)}: la lascia ${fullName(S.atlete[scambio[1].holder])}`}}
       if(!pick&&cand.length){pick=cand[0];if(r.numeroDesiderato!=null)motivo=`Il n.${r.numeroDesiderato} non è disponibile in ${r.taglia}`}
       if(pick){taken.add(pick[0]);o.add(Number(pick[1].numero));prenDivisa[pick[0]]=rid;prop[rid]={esito:'OK',divisaId:pick[0],motivo}}
@@ -746,7 +783,7 @@ function derive(){
     }
   }
   const order=reqs.map(r=>r[0]);
-  _D={set,squadreOrd,perServire,teamIdx,includi,lotto,comuni,modelloPer,art,conNumero,perAtleta,occ,riservati,stock,dotazione,prop,prenDivisa,prenMat,order,key};
+  _D={set,squadreOrd,perServire,teamIdx,includi,lotto,gruppo,comuni,lottiLibero,liberoDi,modelloPer,art,conNumero,perAtleta,occ,riservati,stock,dotazione,prop,prenDivisa,prenMat,order,key};
   return _D;
 }
 
@@ -866,6 +903,7 @@ function bloccaTestata(view){
 function nomeLotto(m,plurale){
   m=m||'STANDARD';
   if(m==='STANDARD')return plurale?'Divise gara':'Divisa gara';
+  if(tipoLotto(m)==='libero')return m==='LIBERO'?(plurale?'Maglie da libero':'Maglia da libero'):(plurale?'Maglie ':'Maglia ')+m.toLowerCase();
   return (plurale?'Divise ':'Divisa ')+m.toLowerCase();
 }
 /* Il colore del lotto: bianca per i lotti comuni (i liberi), nera per un lotto
@@ -943,6 +981,10 @@ function vAtlete(){
       <span class="meta quanti">${cercando&&dentro.length!==n?`${dentro.length} di ${n}`:`${n} ${n===1?'atleta':'atleti'}`}</span>
       <span class="slotAvviso">${suoi.length?`<span class="pill bad" title="Due atleti di questa squadra portano lo stesso numero">${suoi.length===1?`n.${suoi[0]} doppio`:`numeri doppi: ${suoi.join(', ')}`}</span>`:''}</span>`+`
       ${lotti.length>1?`<select id="sl_${esc(x.nome)}" class="inRiga" data-act="modSquadra" data-n="${esc(x.nome)}" data-f="modelloDivisa" aria-label="Lotto divise di ${esc(teamLabel(x.nome))}">${lotti.map(m=>`<option value="${esc(m)}"${(x.modelloDivisa||'STANDARD')===m?' selected':''}>divise ${esc(m.toLowerCase())}</option>`).join('')}</select>`:''}
+      ${(()=>{const altre=squadre.filter(y=>y.nome!==x.nome);if(!altre.length)return '';
+        const con=squadreDellaSerie(D,x.nome).filter(n=>n!==x.nome);
+        return `<select id="gn_${esc(x.nome)}" class="inRiga numeriCon${con.length?' attivo':''}" data-act="modSquadra" data-n="${esc(x.nome)}" data-f="gruppoNumeri" aria-label="Numeri di maglia in comune con" title="${con.length?`Numeri in comune con ${esc(con.map(teamLabel).join(', '))}`:'Numeri di maglia propri: scegliere una squadra per condividerli'}">
+          <option value="">numeri propri</option>${altre.map(y=>`<option value="${esc(y.nome)}"${con[0]===y.nome?' selected':''}>numeri in comune con ${esc(teamLabel(y.nome))}</option>`).join('')}</select>${con.length>1?`<span class="meta">e con ${esc(con.slice(1).map(teamLabel).join(', '))}</span>`:''}`})()}
       <label class="check" style="margin:0"><input type="checkbox" id="inc_${esc(x.nome)}" data-act="modSquadra" data-n="${esc(x.nome)}" data-f="includi" ${x.includi!==false?'checked':''}><span class="meta">in distribuzione</span></label>
     </div>
     <div class="right">
@@ -1116,14 +1158,15 @@ function vMagazzino(){
        <label class="check"><input type="checkbox" id="c_inUso" data-act="toggleInUse" ${S.ui.showInUse?'checked':''}> Mostra anche le divise in uso</label>`
     : `<label class="check"><input type="checkbox" id="c_vecchie" data-act="toggleOld" ${S.ui.showOld?'checked':''}> Mostra le stagioni precedenti</label>`;
   const azione=S.ui.magTab==='divise'
-    ? '<button type="button" class="btn" data-act="newDivisa">Aggiungi divisa</button>'
+    ? '<button type="button" class="btn" data-act="newLotto">Aggiungi lotto</button><button type="button" class="btn" data-act="newDivisa">Aggiungi divisa</button>'
     : '<button type="button" class="btn" data-act="newArticolo">Aggiungi articolo</button>';
   let h=`<h1>Magazzino</h1><div class="row-actions barraMag"><div class="seg" role="group" aria-label="Vista">
     <button type="button" id="t_magTab_divise" data-act="magTab" data-v="divise" aria-pressed="${S.ui.magTab==='divise'}">Divise</button>
     <button type="button" id="t_magTab_materiale" data-act="magTab" data-v="materiale" aria-pressed="${S.ui.magTab!=='divise'}">Materiale</button></div>
     <span class="opzMag">${opzione}</span>${azione}</div>`;
   h+=S.ui.magTab==='divise'
-    ?legenda(`<p>Le divise da gara, per lotto e per taglia: ogni riquadro rappresenta una maglia, con numero e taglia. Selezionando un riquadro si modificano taglia, numero, lotto e nota; una maglia in magazzino può inoltre essere segnata come dismessa. Normalmente sono visibili solo le maglie disponibili: l'opzione in alto mostra anche quelle in uso.</p>`,
+    ?legenda(`<p>Le divise da gara, per lotto e per taglia: ogni riquadro rappresenta una maglia, con numero e taglia. Selezionando un riquadro si modificano taglia, numero, lotto e nota; una maglia in magazzino può inoltre essere segnata come dismessa. Normalmente sono visibili solo le maglie disponibili: l'opzione in alto mostra anche quelle in uso.</p>
+    <p>Ogni lotto indica il tipo (divise da gara o maglie da libero) e le squadre che lo utilizzano. <b>Aggiungi lotto</b> crea un lotto nuovo; <b>Modifica lotto</b> ne cambia nome, tipo e squadre. Un lotto senza maglie si può eliminare.</p>`,
       vociDivise(true))
     :legenda(`<p>Gli articoli con le rispettive taglie. <b>Totale</b> = consegnati + in magazzino. <b>Magazzino finale</b> = in magazzino − prenotati + ordinati, cioè la giacenza prevista dopo la consegna delle richieste e l'arrivo degli ordini.</p>
       <p>Selezionando una riga, o con <b>Carico</b>, si registrano i pezzi arrivati, si corregge la giacenza dopo un inventario e si indica la quantità ordinata al fornitore.</p>`,
@@ -1136,7 +1179,9 @@ function vMagazzino(){
   if(S.ui.magTab==='divise'){
     const probl=problemiDivise();
     if(probl.length)h+=`<div class="notice bad">${probl.join('<br>')}</div>`;
-    const mods=[...new Set(Object.values(S.divise).map(d=>d.modello||'STANDARD'))].sort((a,b)=>(a==='STANDARD'?-1:b==='STANDARD'?1:a.localeCompare(b)));
+    // Tutti i lotti, anche quelli ancora vuoti: prima quelli da gara, poi i liberi.
+    const mods=[...new Set([...(D.set.modelli||[]),...Object.values(S.divise).map(d=>d.modello||'STANDARD')])]
+      .sort((a,b)=>(tipoLotto(a)===tipoLotto(b)?0:tipoLotto(a)==='gara'?-1:1)||(a==='STANDARD'?-1:b==='STANDARD'?1:a.localeCompare(b)));
     let trovate=0;
     for(const m of mods){
       const nD=S.ui.nDiv===''||S.ui.nDiv==null?null:Number(S.ui.nDiv);
@@ -1145,7 +1190,11 @@ function vMagazzino(){
       trovate+=ents.length;
       const sizes=[...new Set(ents.map(e=>e[1].taglia))].sort((a,b)=>szIdx(a)-szIdx(b));
       const free=ents.filter(([id,d])=>(!d.holder||d.daRestituire)&&!D.prenDivisa[id]).length;
-      h+=`<div class="group-head"><h2>${esc(nomeLotto(m,true))}</h2><span>${free} disponibili dopo le assegnazioni</span></div><div class="list">`;
+      const usano=D.perServire.filter(x=>tipoLotto(m)==='libero'?D.liberoDi[x.nome]===m:D.lotto[x.nome]===m).map(x=>teamLabel(x.nome));
+      h+=`<div class="group-head testaLotto"><h2>${esc(nomeLotto(m,true))}</h2><span class="pill">${esc(TIPI_MAGLIA[tipoLotto(m)])}</span>
+        <span>${free} disponibili dopo le assegnazioni · ${usano.length?`usato da ${esc(usano.length>4?usano.slice(0,4).join(', ')+` e altre ${usano.length-4}`:usano.join(', '))}`:'nessuna squadra lo usa'}</span>
+        <button type="button" class="btn small ghost" data-act="modLotto" data-v="${esc(m)}">Modifica lotto</button></div><div class="list">`;
+      if(!ents.length)h+=`<p class="empty">Nessuna maglia in questo lotto: si aggiungono con «Aggiungi divisa».</p>`;
       for(const s of sizes){
         const inS=ents.filter(e=>e[1].taglia===s).sort((a,b)=>a[1].numero-b[1].numero);
         const avail=inS.filter(([id,d])=>!d.holder||d.daRestituire);
@@ -1256,7 +1305,7 @@ function testaSquadre(){
       [[`<span class="numTag">8<small>M</small></span>`,'in uso'],
        [`<span class="numTag da">8<small>M</small></span>`,'da cambiare'],
        ['<span class="vuoto">—</span>','non consegnato']])
-    :legenda(`<p>Ogni riga corrisponde a una squadra; con <b>+</b> si visualizzano i suoi atleti e con <b>Apri</b> si accede alla scheda dell'atleta, con la dotazione e le richieste. Sulla riga della squadra si modificano nome, lotto di divise e ordine di distribuzione, che stabilisce anche l'ordine in cui le squadre compaiono in tutte le schermate.</p>
+    :legenda(`<p>Ogni riga corrisponde a una squadra; con <b>+</b> si visualizzano i suoi atleti e con <b>Apri</b> si accede alla scheda dell'atleta, con la dotazione e le richieste. Sulla riga della squadra si modificano nome, lotto di divise, numeri in comune con altre squadre e ordine di distribuzione, che stabilisce anche l'ordine in cui le squadre compaiono in tutte le schermate.</p>
       <p><b>Consegna a tutti</b> consegna o ritira un articolo per l'intera squadra; <b>Scarica lista</b> produce il foglio Excel per la distribuzione, con gli articoli da consegnare e quelli da ritirare. Le squadre e le righe evidenziate in rosso contengono un numero di maglia ripetuto.</p>`,
       vociDivise(false));
   return `<h1>Squadre</h1><div class="row-actions barraMag"><div class="seg" role="group" aria-label="Vista">
@@ -1278,12 +1327,14 @@ function testaSquadre(){
    da cambiare non contano: quelle stanno tornando indietro e il loro numero e'
    gia' libero per un'altra. */
 function numeriDiSquadra(D,squadra){
+  // Tutta la serie: con un gruppo di squadre, i numeri di tutte.
+  const piu=squadreDellaSerie(D,squadra).length>1;
   const per={};
   for(const [id,a] of Object.entries(S.atlete)){
-    if(a.squadra!==squadra)continue;
+    if(!stessaSerie(D,a.squadra,squadra))continue;
     for(const did of (D.perAtleta[id]||[])){
       const d=S.divise[did];if(!d||d.dismessa||d.daRestituire)continue;
-      (per[Number(d.numero)]=per[Number(d.numero)]||[]).push(fullName(a))}}
+      (per[Number(d.numero)]=per[Number(d.numero)]||[]).push(fullName(a)+(piu?` (${teamLabel(a.squadra)})`:''))}}
   return per;
 }
 
@@ -1297,9 +1348,9 @@ function conNumeroDoppio(D){
     for(const [n,chi] of Object.entries(per)){
       if(chi.length<2)continue;
       for(const [id,a] of Object.entries(S.atlete)){
-        if(a.squadra!==sq.nome)continue;
-        if(!chi.includes(fullName(a)))continue;
-        (fuori[id]=fuori[id]||[]).push(Number(n));
+        if(!stessaSerie(D,a.squadra,sq.nome))continue;
+        if(!chi.some(c=>c===fullName(a)||c.startsWith(fullName(a)+' (')))continue;
+        if(!(fuori[id]||[]).includes(Number(n)))(fuori[id]=fuori[id]||[]).push(Number(n));
       }}}
   return fuori;
 }
@@ -1335,13 +1386,10 @@ function vRiepilogo(){
   // Il conto dei doppioni si fa su tutte le squadre, non solo su quelle
   // filtrate: se ne nascondi una con un doppione dentro, il cartello in cima
   // direbbe che va tutto bene.
-  const doppioni=[];
-  for(const s of D.perServire)
-    for(const [n,chi] of Object.entries(numeriDiSquadra(D,s.nome)))
-      if(chi.length>1)doppioni.push({squadra:s.nome,numero:n,chi});
+  const doppioni=doppioniPerSerie(D);
   html+=doppioni.length
-    ? `<div class="notice bad"><b>${doppioni.length} ${doppioni.length===1?'numero ripetuto':'numeri ripetuti'}</b> dentro una squadra: `
-      +doppioni.map(x=>`${esc(teamLabel(x.squadra))} n.${esc(x.numero)} (${x.chi.map(esc).join(' e ')})`).join(' \u00b7 ')+`</div>`
+    ? `<div class="notice bad"><b>${doppioni.length} ${doppioni.length===1?'numero ripetuto':'numeri ripetuti'}</b> dentro una squadra o un gruppo di squadre: `
+      +doppioni.map(x=>`${esc(x.serie)} n.${esc(x.numero)} (${x.chi.map(esc).join(' e ')})`).join(' \u00b7 ')+`</div>`
     : `<div class="notice ok">Nessun numero ripetuto: in ogni squadra ogni numero e\u2019 di una persona sola.</div>`;
 
   const doppi=conNumeroDoppio(D);
@@ -1353,7 +1401,7 @@ function vRiepilogo(){
     const numeri=numeriDiSquadra(D,sq);
     const inFila=Object.keys(numeri).map(Number).sort((x,y)=>x-y);
     html+=`<div class="group-head"><h2>${esc(teamLabel(sq))}</h2><span>${conRoba.length} ${conRoba.length===1?'atleta':'atleti'} con materiale</span></div>
-    ${inFila.length?`<p class="filaNumeri">Numeri in campo: ${inFila.map(n=>`<span class="numTag${numeri[n].length>1?' doppio':''}" title="${esc(numeri[n].join(', '))}">${n}</span>`).join('')}</p>`:''}
+    ${inFila.length?`<p class="filaNumeri">Numeri in campo${squadreDellaSerie(D,sq).length>1?` (in comune con ${esc(squadreDellaSerie(D,sq).filter(x=>x!==sq).map(teamLabel).join(', '))})`:''}: ${inFila.map(n=>`<span class="numTag${numeri[n].length>1?' doppio':''}" title="${esc(numeri[n].join(', '))}">${n}</span>`).join('')}</p>`:''}
     <div class="tabellaFuori"><table class="tab riepilogo" style="--colonne:${arts.length}"><thead><tr><th class="colAtleta">Atleta</th>${conDivise?'<th class="colDivise">Divise</th>':''}${arts.map(a=>`<th class="num">${esc(artLabel(a))}</th>`).join('')}</tr></thead><tbody>`;
     for(const [id,a] of conRoba){
       const divise=(D.perAtleta[id]||[]).map(x=>S.divise[x]).filter(Boolean);
@@ -1489,10 +1537,7 @@ function vHome(){
   // La copertina parla solo se c'e' qualcosa da sistemare. Un numero portato
   // da due persone della stessa squadra e' l'unico errore che si paga in
   // palestra: e' l'unico che vale la pena gridare da qui.
-  const doppioni=[];
-  for(const sq of D.perServire)
-    for(const [n,chi] of Object.entries(numeriDiSquadra(D,sq.nome)))
-      if(chi.length>1)doppioni.push({squadra:sq.nome,numero:n});
+  const doppioni=doppioniPerSerie(D);
   const v=window.__APP?window.__APP.versione():null;
   const soc=(D.set.societa||'').trim();
   const logo=D.set.logo;
@@ -1516,7 +1561,7 @@ function vHome(){
   <p class="sottoGriglia"><a class="btn" href="#manuale">Manuale</a></p>
   ${doppioni.length?`<p class="allarmeHome"><a href="#squadre">${doppioni.length===1
     ?'Un numero è portato da due atleti della stessa squadra'
-    :`${doppioni.length} numeri sono portati da due atleti della stessa squadra`}: ${doppioni.slice(0,4).map(x=>`${esc(teamLabel(x.squadra))} n.${esc(x.numero)}`).join(', ')}${doppioni.length>4?(doppioni.length===5?' e un altro':` e altri ${doppioni.length-4}`):''}</a></p>`:''}
+    :`${doppioni.length} numeri sono portati da due atleti della stessa squadra`}: ${doppioni.slice(0,4).map(x=>`${esc(x.serie)} n.${esc(x.numero)}`).join(', ')}${doppioni.length>4?(doppioni.length===5?' e un altro':` e altri ${doppioni.length-4}`):''}</a></p>`:''}
   <p class="versione">${v?`Versione ${esc(v)}`:'Versione di prova nel browser'}</p>`;
 }
 
@@ -1553,7 +1598,8 @@ function vManuale(){
     <p><b>Famiglia</b> ed <b>etichetta</b> — determinano come l'articolo viene visualizzato: la famiglia raggruppa (Tee), l'etichetta distingue all'interno della famiglia (Nera allenamento). Possono essere modificate in qualsiasi momento.</p>
     <p><b>Stagione dell'articolo</b> — nella finestra <i>Modifica articolo</i> la casella «Articolo di questa stagione» indica se l'articolo appartiene alla stagione in corso. Solo questi articoli, e quelli senza stagione indicata, compaiono nel modulo di distribuzione.</p>
     <p><b>Si può ancora consegnare</b> — togliendo questa spunta l'articolo resta in inventario ma non viene più proposto. Con <i>Mostra le stagioni precedenti</i>, in Magazzino → Materiale, si visualizzano anche gli articoli delle stagioni passate.</p>
-    <p><b>Lotto</b> — l'insieme di divise da cui attinge una squadra. La maggior parte delle squadre utilizza il lotto standard; una squadra può averne uno riservato. Le <b>maglie da libero</b> costituiscono un lotto comune a tutte le squadre.</p>
+    <p><b>Lotto</b> — un insieme di maglie dello stesso tipo: <i>divise da gara</i> oppure <i>maglie da libero</i>. Ogni squadra utilizza un lotto per tipo: di norma il lotto standard per le divise e il lotto LIBERO per le maglie da libero, ma può averne di riservati (per esempio divise e liberi della prima squadra, distinti da quelli delle giovanili). Una richiesta indica solo il tipo di maglia; il lotto lo stabilisce la squadra. Nel cambio, una maglia da libero si sostituisce con un'altra maglia da libero e una divisa con un'altra divisa, anche di lotti diversi, mantenendo il numero quando è libero. I lotti si gestiscono in Magazzino → Divise.</p>
+    <p><b>Numeri in comune</b> — il menu sulla riga della squadra. Scegliendo un'altra squadra, le due condividono un'unica serie di numeri di maglia: un numero in uso in una non viene dato nell'altra. Il collegamento è reciproco; più squadre possono far parte dello stesso gruppo; con «numeri propri» la squadra esce dal gruppo.</p>
     <p><b>Ordine di distribuzione</b> — il numero indicato sulla riga della squadra. Stabilisce quale squadra viene servita per prima quando il materiale non è sufficiente e l'ordine in cui le squadre compaiono in tutte le schermate. Le richieste con un numero di maglia preciso hanno comunque la precedenza.</p>
     <p><b>In distribuzione</b> — la casella sulla riga della squadra: togliendola, le richieste della squadra non vengono servite.</p>
     <p><b>Da cambiare</b> — un capo in uso che l'atleta deve sostituire. Alla consegna del capo nuovo quello precedente rientra automaticamente.</p>
@@ -1571,7 +1617,7 @@ function vManuale(){
     <p><b>Squadre</b> — due schede. <i>Atleti</i>: una riga per squadra, con nome, lotto, casella «in distribuzione», ordine di distribuzione e i pulsanti <b>Consegna a tutti</b>, <b>Scarica lista</b> ed <b>Elimina</b> (possibile solo per una squadra senza atleti); con <b>+</b> si visualizzano gli atleti, modificabili direttamente sulla riga, e con <b>Apri</b> si accede alla loro scheda. <i>Riepilogo</i>: la dotazione attuale di ogni atleta e i numeri in uso in ciascuna squadra. Le due schede hanno gli stessi filtri (nome, squadra, numero di maglia) e gli stessi pulsanti <b>Aggiungi atleta</b> e <b>Aggiungi squadra</b>. Gli atleti la cui squadra non è più nell'elenco compaiono in fondo, con il pulsante per aggiungerla.</p>
     <p><b>Scheda dell'atleta</b> — divise, materiale e richieste dell'atleta, con i pulsanti <b>Consegna diretta</b>, <b>Nuova richiesta</b> e <b>Modifica atleta</b>. Ogni richiesta si modifica con ✎ e si elimina con ✕. Una nuova richiesta indica articolo e taglia e, per le divise, il tipo (divisa della squadra o maglia da libero) e l'eventuale numero desiderato.</p>
     <p><b>Assegnazioni</b> — due schede. <i>Richieste</i>: le richieste aperte, raggruppate per squadra, con il capo proposto dal programma e i filtri per squadra, esito, articolo e numero. <i>Da ordinare</i>: i pezzi da ordinare al fornitore, per articolo e taglia, al netto di quelli già ordinati.</p>
-    <p><b>Magazzino</b> — due schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo. <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − mancanti + ordinati). Selezionando una riga si apre la finestra del carico: <b>Registra arrivo</b> aggiunge i pezzi arrivati e li scala dagli ordinati, <b>Correggi giacenza</b> sostituisce la giacenza dopo un inventario, e si indica la quantità ordinata. Eventuali incongruenze sono segnalate in cima alla scheda.</p>
+    <p><b>Magazzino</b> — due schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo, <b>Aggiungi lotto</b> e <b>Modifica lotto</b> gestiscono i lotti e le squadre che li usano. <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − mancanti + ordinati). Selezionando una riga si apre la finestra del carico: <b>Registra arrivo</b> aggiunge i pezzi arrivati e li scala dagli ordinati, <b>Correggi giacenza</b> sostituisce la giacenza dopo un inventario, e si indica la quantità ordinata. Eventuali incongruenze sono segnalate in cima alla scheda.</p>
     <p><b>Movimenti</b> — il registro di consegne, rientri, carichi e rettifiche, dal più recente; vengono mostrati gli ultimi 150, con il pulsante per visualizzarli tutti. <b>Registra movimento</b> inserisce un movimento manuale di materiale.</p>
     <p><b>Impostazioni</b> — stagione in corso, nome e stemma della società, fogli Excel (scaricare e caricare i dati, scaricare i movimenti), codici degli articoli, aspetto (chiaro, scuro o come il computer), aggiornamenti e copie di sicurezza. Le funzioni che lavorano con i file sono disponibili nel programma installato.</p>`)}
 
@@ -1579,6 +1625,7 @@ function vManuale(){
     <p>All'interno di una squadra <b>un numero di maglia non può ripetersi</b>. Tra squadre diverse lo stesso numero è invece ammesso.</p>
     <p>Nel proporre le divise il programma dà la precedenza al numero richiesto; poi al numero della maglia che l'atleta sta cambiando, che resta riservato a lei; poi alla maglia che un compagno di squadra deve sostituire (lo scambio); infine al numero libero più basso. A un atleta non viene mai proposta la maglia che sta restituendo.</p>
     <p>La regola viene controllata anche nelle consegne manuali, nella modifica del numero di una divisa, quando una maglia torna «in uso» con <i>Non la cambia più</i> e quando un atleta viene spostato in un'altra squadra: in quest'ultimo caso, se il suo numero è già in uso, la sua maglia viene segnata da cambiare.</p>
+    <p>Le squadre collegate con <b>Numeri in comune</b> (per esempio due squadre della stessa categoria) formano un gruppo: la regola vale per tutto il gruppo, maglie da libero comprese, come se fosse una squadra sola. Collegando due squadre che hanno già numeri in comune, il programma li elenca e chiede conferma.</p>
     <p>Un eventuale numero ripetuto è segnalato nella pagina iniziale, sulla riga della squadra (anche se chiusa), sulle righe degli atleti interessati, nel Riepilogo e sulle richieste di divise.</p>`)}
 
   ${sezione('Consegne e rientri',`
@@ -1604,9 +1651,10 @@ function vManuale(){
 
   ${sezione('Fogli Excel',`
     <p>In <b>Impostazioni → Fogli Excel</b> si trovano tutti i file che il programma scarica e carica: il modulo di distribuzione, i quattro fogli dei dati e il registro dei movimenti. L'unico altro file è la <b>lista di squadra</b>, sulla riga di ogni squadra.</p>
-    <p>Il <b>modulo di distribuzione</b> è destinato ai dirigenti: contiene un foglio per squadra con gli atleti già inseriti e gli articoli della stagione in corso. Per ogni articolo con taglie sono previste tre colonne: la risposta (<i>ce l'ho</i>, <i>mi manca</i>, <i>da cambiare</i>; la casella vuota equivale a <i>ce l'ho</i>), la <i>taglia</i> attuale e la <i>taglia richiesta</i>, da compilare solo se diversa; gli articoli senza taglie hanno la sola risposta. La colonna <i>Numero maglia</i> riporta il numero attuale; la colonna <i>Note</i> è libera. Al caricamento vengono creati squadre, atleti e richieste; un foglio copiato dentro Excel viene ricondotto alla sua squadra, e un foglio che non corrisponde a nessuna squadra viene segnalato prima di crearne una nuova.</p>
+    <p>Il <b>modulo di distribuzione</b> è destinato ai dirigenti: contiene un foglio per squadra con gli atleti già inseriti e gli articoli della stagione in corso. Ogni articolo ha il nome nella prima riga dell'intestazione e, sotto, due colonne: la <i>Risposta</i> (<i>ce l'ho</i>, <i>mi manca</i>, <i>da cambiare</i>, dal menu a tendina; la casella vuota equivale a <i>ce l'ho</i>) e la <i>Taglia</i> da consegnare, dal menu con le taglie dell'articolo; gli articoli senza taglie hanno la sola risposta. La colonna <i>Numero maglia</i> riporta il numero attuale; la colonna <i>Note</i> è libera. Al caricamento vengono creati squadre, atleti e richieste; un foglio copiato dentro Excel viene ricondotto alla sua squadra, e un foglio che non corrisponde a nessuna squadra viene segnalato prima di crearne una nuova.</p>
     <p>Gli altri quattro fogli servono al caricamento iniziale e vanno caricati in quest'ordine: <b>Articoli e magazzino</b>, <b>Squadre e atleti</b>, <b>Divise da gara</b>, <b>Richieste</b>. Vengono scaricati già compilati con i dati presenti nel programma, con in fondo alcune colonne solo informative (per esempio consegnati, prenotati e magazzino finale per gli articoli, esito e numero proposto per le richieste), che al caricamento vengono ignorate. Il foglio <b>Movimenti</b> si scarica soltanto. Le colonne sono riconosciute dal titolo: un foglio con colonne mancanti o ripetute viene rifiutato.</p>
     <p>Le taglie devono corrispondere a quelle previste per l'articolo; negli articoli delle richieste si può indicare il nome, il codice o il nome visualizzato. Il caricamento aggiunge soltanto: i dati già presenti non vengono modificati, il caricamento ripetuto dello stesso file non crea duplicati e non ricrea le richieste già consegnate.</p>
+    <p>Nei fogli scaricati, le colonne con valori prestabiliti hanno un <b>menu a tendina</b>: le risposte e le taglie del modulo di distribuzione, sì/no, il tipo di lotto, le squadre. Il foglio <i>Istruzioni</i> descrive ogni colonna.</p>
     <p>Prima di caricare, il programma controlla ogni riga e mostra un riepilogo: cosa verrà aggiunto, cosa verrà ignorato perché già presente, le squadre e i lotti nuovi e le righe con errori, che non vengono caricate (per esempio un valore non ammesso, una taglia che Excel ha trasformato in data, un numero di maglia fuori dall'intervallo 0–99, un atleta o un articolo inesistente). Segnala inoltre, come avvisi, le situazioni da verificare: righe ripetute, giacenze diverse da quelle nel programma, numeri di maglia già in uso nella squadra, note che sembrano contenere recapiti (che non vengono caricate). Errori e avvisi dell'ultimo caricamento restano elencati in Impostazioni.</p>`)}
 
   ${sezione('Lista di squadra',`
@@ -1666,7 +1714,7 @@ async function fogliaSquadra(nome){
   try{
   await window.__APP.scriviExcel(dove,nomeFoglioExcel(teamLabel(nome)),
     ['Cognome','Nome','Cosa','Articolo','Taglia','Numero','Stato','Nota','Firma'],testo,
-    [`${teamLabel(nome)} · ${D.set.stagione||''}`,
+    guidaPerExcel([`${teamLabel(nome)} · ${D.set.stagione||''}`,
      `${quanti('RICONSEGNA')} capi da ritirare, ${quanti('RICEVE')} da consegnare.`,
      '',
      'RICONSEGNA  il capo che l’atleta deve restituire.',
@@ -1674,7 +1722,7 @@ async function fogliaSquadra(nome){
      '            "DA ORDINARE" se non è disponibile, "esclusa" se la richiesta non viene servita.',
      'Firma       da far firmare al momento della consegna.',
      '',
-     'Lista generata il '+fmtDate(today())+'. Le consegne vanno poi registrate nel programma.']);
+     'Lista generata il '+fmtDate(today())+'. Le consegne vanno poi registrate nel programma.']));
   }catch(e){toast('Scrittura del file non riuscita: '+e);return}
   toast('Lista salvata');
 }
@@ -1766,6 +1814,66 @@ function dlgTuttaSquadra(nome){
   $('#tSalta').addEventListener('change',agg);
   agg();
 }
+/* Un lotto di maglie: nome, tipo (gara o libero) e squadre che lo usano. Le
+   squadre si possono scegliere anche dalla loro riga in Squadre: e' lo stesso
+   dato. Rinominare un lotto aggiorna le maglie, le squadre e le richieste. */
+function dlgLotto(nome){
+  const D=derive();const nuovo=!nome;
+  const tipo=nuovo?'gara':tipoLotto(nome);
+  const maglie=nuovo?[]:Object.entries(S.divise).filter(([,d])=>!d.dismessa&&(d.modello||'STANDARD')===nome);
+  const usa=x=>!nuovo&&(tipo==='libero'?D.liberoDi[x.nome]===nome:D.lotto[x.nome]===nome);
+  openDlg(`<h2>${nuovo?'Nuovo lotto':'Lotto '+esc(cap(nome))}</h2>
+  <p class="sub">Un lotto è un insieme di maglie dello stesso tipo: le divise da gara di una squadra o di più squadre, oppure le maglie da libero. Ogni squadra usa un lotto per le divise da gara e uno per le maglie da libero.</p>
+  <div class="two"><div class="field"><label for="ltNome">Nome</label><input type="text" id="ltNome" name="nome" required maxlength="40" value="${esc(nome||'')}" placeholder="per esempio LIBERO GIOVANILI"></div>
+  <div class="field"><label for="ltTipo">Tipo</label><select id="ltTipo" name="tipo"><option value="gara"${tipo==='gara'?' selected':''}>Divise da gara</option><option value="libero"${tipo==='libero'?' selected':''}>Maglie da libero</option></select></div></div>
+  <p class="sub" style="margin-bottom:4px">Squadre che lo usano:</p>
+  <div class="colonneSq">${D.perServire.map(x=>`<label class="check"><input type="checkbox" name="sq" value="${esc(x.nome)}"${usa(x)?' checked':''}> ${esc(teamLabel(x.nome))}</label>`).join('')}</div>
+  ${maglie.length?`<p class="sub">Nel lotto ci sono ${maglie.length===1?'una maglia':maglie.length+' maglie'}: una squadra che passa a un altro lotto tiene le maglie che ha, che si cambiano quando serve.</p>`:''}
+  ${actions(nuovo?'Aggiungi lotto':'Salva',!nuovo&&!maglie.length&&(D.set.modelli||[]).length>1?`<button class="btn danger" value="elimina" style="margin-right:auto">Elimina lotto</button>`:'')}`,
+  async(fd,btn)=>{
+    const set=D.set;const modelli=[...(set.modelli||['STANDARD'])];const tipi={...(set.tipiLotto||{})};
+    // i tipi di tutti i lotti gia' esistenti vengono scritti, cosi' non
+    // dipendono piu' dalla vecchia lista dei comuni
+    for(const m of modelli)if(!tipi[m])tipi[m]=tipoLotto(m);
+    let squadre=(set.squadre||[]).map(x=>({...x}));
+    const campo=t=>t==='libero'?'modelloLibero':'modelloDivisa';
+    const altro=(t,escluso)=>modelli.find(m=>m!==escluso&&tipi[m]===t)||null;
+    if(btn==='elimina'){
+      if(!await chiedi(`Eliminare il lotto ${cap(nome)}? Non contiene maglie; le squadre che lo usano passano a un altro lotto dello stesso tipo.`))return false;
+      const sost=altro(tipo,nome);
+      squadre=squadre.map(x=>x[campo(tipo)]===nome?{...x,[campo(tipo)]:sost||undefined}:x);
+      delete tipi[nome];
+      return w(()=>S.db.doc('settings/main').update({modelli:modelli.filter(m=>m!==nome),tipiLotto:tipi,squadre}))}
+    const nuovoNome=(fd.nome||'').trim().toUpperCase().replace(/\s+/g,' ');
+    if(!nuovoNome){toast('Indicare il nome del lotto');return false}
+    if(nuovoNome!==nome&&modelli.some(m=>KEY(m)===KEY(nuovoNome))){toast('Esiste già un lotto con questo nome');return false}
+    const nuovoTipo=fd.tipo==='libero'?'libero':'gara';
+    if(!nuovo&&nuovoTipo!==tipo&&maglie.length&&!await chiedi(`Le ${maglie.length} maglie del lotto diventano ${nuovoTipo==='libero'?'maglie da libero':'divise da gara'}. Continuare?`))return false;
+    const scelte=new Set(fd._all.getAll('sq'));
+    // se cambia tipo, chi lo usava per il tipo vecchio passa a un altro lotto
+    if(!nuovo&&nuovoTipo!==tipo){const sost=altro(tipo,nome);squadre=squadre.map(x=>x[campo(tipo)]===nome?{...x,[campo(tipo)]:sost||undefined}:x)}
+    // le squadre spuntate usano questo lotto; quelle tolte tornano a un altro
+    const sostituto=altro(nuovoTipo,nome);
+    let senzaAlternativa=0;
+    squadre=squadre.map(x=>{
+      const f=campo(nuovoTipo);const attuale=nuovoTipo==='libero'?(x.modelloLibero||D.lottiLibero[0]):(x.modelloDivisa||'STANDARD');
+      if(scelte.has(x.nome))return {...x,[f]:nuovoNome};
+      if(attuale===nome){if(!sostituto){senzaAlternativa++;return {...x,[f]:nuovoNome}}return {...x,[f]:sostituto}}
+      return x});
+    if(senzaAlternativa)toast('Alcune squadre restano su questo lotto: non ci sono altri lotti dello stesso tipo');
+    const listaNuova=nuovo?[...modelli,nuovoNome]:modelli.map(m=>m===nome?nuovoNome:m);
+    if(!nuovo&&nuovoNome!==nome){delete tipi[nome];
+      squadre=squadre.map(x=>({...x,...(x.modelloDivisa===nome?{modelloDivisa:nuovoNome}:{}),...(x.modelloLibero===nome?{modelloLibero:nuovoNome}:{})}))}
+    tipi[nuovoNome]=nuovoTipo;
+    const ok=await w(async()=>{
+      if(!nuovo&&nuovoNome!==nome){
+        for(const [id] of maglie)await S.db.doc('divise/'+id).update({modello:nuovoNome});
+        for(const [rid,r] of Object.entries(S.richieste))if(r.modello===nome)await S.db.doc('richieste/'+rid).update({modello:nuovoNome})}
+      await S.db.doc('settings/main').update({modelli:listaNuova,tipiLotto:tipi,squadre})});
+    if(ok)toast(nuovo?`Lotto ${cap(nuovoNome)} aggiunto`:'Lotto salvato');
+    return ok});
+}
+
 /* ---- Impostazioni ---- */
 function vImpostazioni(){
   const D=derive();
@@ -1796,7 +1904,7 @@ function vImpostazioni(){
    comuni, che non appartengono a nessuna squadra in particolare. */
 function lottiSceglibili(){
   const D=derive();
-  return (D.set.modelli||['STANDARD']).filter(m=>!D.comuni.has(m));
+  return (D.set.modelli||['STANDARD']).filter(m=>tipoLotto(m)==='gara');
 }
 
 /* Aggiornamenti: il programma vive sul computer, quindi le versioni nuove
@@ -1990,9 +2098,8 @@ async function doConsegna(rid,p,sh,ritiro){
    (qualunque lotto usi) piu' i modelli comuni a tutta la societa', i liberi. */
 function modelliSceglibili(aid){
   const D=derive();const a=S.atlete[aid];
-  const voci=[{v:'',t:'Divisa della squadra'}];
-  for(const m of D.comuni)voci.push({v:m,t:cap(m)});
-  return voci;
+  // Si sceglie il tipo; il lotto lo decide la squadra.
+  return [{v:'',t:'Divisa della squadra'},{v:D.lottiLibero[0],t:'Maglia da libero'+(a&&D.lottiLibero.length>1?` (${cap(D.liberoDi[a.squadra]||D.lottiLibero[0])})`:'')}];
 }
 /* Le divise che questo atleta deve restituire, a fronte di una richiesta di
    quel modello.
@@ -2000,9 +2107,9 @@ function modelliSceglibili(aid){
    libero. Le divise da gara invece si cambiano fra loro **qualunque lotto
    siano**, perche' passare di squadra vuol dire proprio cambiare lotto. */
 function stessoGenere(modelloDivisa,modelloChiesto){
-  const D=derive();const a=modelloDivisa||'STANDARD';const b=modelloChiesto||'STANDARD';
-  if(D.comuni.has(a)||D.comuni.has(b))return a===b;
-  return true; // due lotti di divise da gara: intercambiabili per il cambio
+  // Stesso tipo di maglia, qualunque lotto: un libero si cambia con un
+  // libero, una divisa da gara con una divisa da gara.
+  return tipoLotto(modelloDivisa)===tipoLotto(modelloChiesto);
 }
 const ownReturning=(aid,mod)=>Object.entries(S.divise).filter(([id,d])=>d.holder===aid&&d.daRestituire&&stessoGenere(d.modello,mod)).map(e=>e[0]);
 
@@ -2487,7 +2594,7 @@ function dlgDivisa(id){
         if(d.holder&&!d.daRestituire){
           const a=S.atlete[d.holder];
           const gia=Object.entries(S.divise).some(([x,y])=>x!==id&&!y.dismessa&&y.holder&&!y.daRestituire
-            &&S.atlete[y.holder]&&S.atlete[y.holder].squadra===a.squadra&&Number(y.numero)===num);
+            &&S.atlete[y.holder]&&stessaSerie(derive(),S.atlete[y.holder].squadra,a.squadra)&&Number(y.numero)===num);
           if(gia){toast(`Il numero ${num} è già assegnato a un altro atleta in ${teamLabel(a.squadra)}`);return false}
         }
         const dup=Object.entries(S.divise).some(([x,y])=>x!==id&&!y.dismessa&&y.taglia===tg
@@ -2604,6 +2711,31 @@ document.addEventListener('change',async e=>{
     if(await w(()=>S.db.doc('settings/main').update({squadre:sq})))
       toast(num===null?'Senza ordine: viene servita per ultima':`${teamLabel(vecchio)}: ordine ${num}`);
     return}
+  if(campo==='gruppoNumeri'){
+    const altra=el.value;
+    const vecchioG=x.gruppoNumeri||null;
+    // Chi esce dal gruppo: se nel gruppo resta una squadra sola, si scioglie.
+    const esci=lista=>{if(!vecchioG)return lista;
+      const resto=lista.filter(y=>y.gruppoNumeri===vecchioG&&y.nome!==vecchio);
+      return lista.map(y=>y.nome===vecchio?{...y,gruppoNumeri:null}:(resto.length===1&&y.gruppoNumeri===vecchioG?{...y,gruppoNumeri:null}:y))};
+    let nuove;
+    if(!altra){
+      nuove=esci(sq);
+    }else{
+      const j=sq.findIndex(y=>y.nome===altra);if(j<0)return;
+      const g=sq[j].gruppoNumeri||('N'+Date.now().toString(36));
+      nuove=esci(sq).map(y=>y.nome===vecchio||y.nome===altra?{...y,gruppoNumeri:g}:y);
+      // Prima di unire: i numeri che risulterebbero ripetuti nel gruppo.
+      const membri=nuove.filter(y=>y.gruppoNumeri===g).map(y=>y.nome);
+      const per={};
+      for(const d of Object.values(S.divise)){if(d.dismessa||!d.holder||d.daRestituire)continue;const a=S.atlete[d.holder];if(!a||!membri.includes(a.squadra))continue;
+        (per[Number(d.numero)]=per[Number(d.numero)]||new Set()).add(a.squadra)}
+      const doppi=Object.entries(per).filter(([,t])=>t.size>1).map(([n])=>n).sort((p,q)=>p-q);
+      if(doppi.length&&!await chiedi(`In ${membri.map(teamLabel).join(' e ')} ${doppi.length===1?`il n.${doppi[0]} è già usato in più di una squadra`:`i numeri ${doppi.join(', ')} sono già usati in più di una squadra`}.\nCondividere comunque i numeri? ${doppi.length===1?'Il numero verrà segnalato come doppio':'I numeri verranno segnalati come doppi'} finché non si sistemano.`)){render();return}
+    }
+    if(await w(()=>S.db.doc('settings/main').update({squadre:nuove})))
+      toast(altra?`${teamLabel(vecchio)} e ${teamLabel(altra)}: numeri di maglia in comune`:`${teamLabel(vecchio)}: numeri di maglia propri`);
+    return}
   if(campo==='modelloDivisa'){
     sq[i]={...x,modelloDivisa:el.value};
     if(await w(()=>S.db.doc('settings/main').update({squadre:sq})))toast(`${teamLabel(vecchio)}: divise dal lotto ${el.value.toLowerCase()}`);
@@ -2657,7 +2789,7 @@ document.addEventListener('click',async e=>{
       // stato dato a una compagna, in squadra ce ne sarebbero due.
       if(d.daRestituire&&d.holder&&S.atlete[d.holder]){const sq=S.atlete[d.holder].squadra;
         const altra=Object.values(S.divise).find(x=>x!==d&&!x.dismessa&&x.holder&&x.holder!==d.holder&&!x.daRestituire
-          &&S.atlete[x.holder]&&S.atlete[x.holder].squadra===sq&&Number(x.numero)===Number(d.numero));
+          &&S.atlete[x.holder]&&stessaSerie(derive(),S.atlete[x.holder].squadra,sq)&&Number(x.numero)===Number(d.numero));
         if(altra){toast(`Il numero ${d.numero} è già di ${fullName(S.atlete[altra.holder])} in ${teamLabel(sq)}: la maglia resta da cambiare`);return}}
       if(await w(()=>S.db.doc('divise/'+id).update({daRestituire:!d.daRestituire})))toast(d.daRestituire?'Non la cambia più: il suo numero torna occupato':'Segnata da cambiare: torna disponibile per le assegnazioni');return}
     case'rientroDivisa':{const d=S.divise[id];if(!await chiedi(`Registrare la restituzione della ${d.taglia} n.${d.numero}?`))return;
@@ -2726,6 +2858,8 @@ document.addEventListener('click',async e=>{
     case'newArticolo':return dlgArticolo(null);
     case'modArticolo':return dlgArticolo(Number(el.dataset.i));
     case'scaricaMov':return scaricaMovimenti();
+    case'newLotto':return dlgLotto(null);
+    case'modLotto':return dlgLotto(el.dataset.v);
     case'rivediEsito':return finestraEsitoExcel();
     case'salvaCopia':return window.__APP.esporta().then(d=>{if(d){toast('Copia salvata');chiediInfoCopie(true)}}).catch(e=>toast('Salvataggio della copia non riuscito: '+e));
     case'riprendiCopia':{
@@ -2841,12 +2975,46 @@ const numeroMaglia=v=>{const t=String(v??'').trim();if(t==='')return null;const 
 const riga0=i=>`riga ${i+2}`;
 const quali=(arr,n)=>arr.filter(Boolean).join(n||', ');
 
+/* Le istruzioni dei fogli si scrivono qui come testo semplice, allineato con
+   gli spazi; per il foglio Excel ogni riga viene classificata, cosi' la parte
+   che scrive il file le impagina (titolo, sezioni, voci su due colonne):
+     la prima riga                    il titolo ("TITOLO — sottotitolo")
+     "Colonne:" dopo una riga vuota   una sezione
+     "Nome      spiegazione"          una voce: due o piu' spazi separano il
+                                      nome dalla spiegazione
+     riga rientrata di 5+ spazi       continua la spiegazione di sopra
+     il resto                         paragrafi, riuniti fino alla riga vuota */
+function guidaPerExcel(righe){
+  const out=[];let ultimo=null;
+  const aggiungi=(tipo,...parti)=>{ultimo={tipo,parti};out.push(ultimo)};
+  righe.forEach((riga,i)=>{
+    riga=String(riga??'');
+    if(i===0){const [t,sotto]=riga.split(/\s+—\s+/);aggiungi('titolo',t.trim());
+      if(sotto)aggiungi('testo',sotto.charAt(0).toUpperCase()+sotto.slice(1));ultimo=null;return}
+    if(!riga.trim()){out.push(null);ultimo=null;return}
+    const seguito=riga.match(/^\s{5,}(\S.*)$/);
+    if(seguito&&ultimo){ultimo.parti[ultimo.parti.length-1]+=' '+seguito[1].trim();return}
+    const t=riga.trim();
+    if(t.endsWith(':')&&t.length<=30&&!String(righe[i-1]??'').trim()){aggiungi('sezione',t.slice(0,-1));ultimo=null;return}
+    const voce=riga.match(/^\s{0,4}(\S(?:.*?\S)?)\s{2,}(\S.*)$/);
+    if(voce){aggiungi('voce',voce[1],voce[2].trim());return}
+    if(ultimo&&ultimo.tipo==='testo'){ultimo.parti[0]+=' '+t;return}
+    aggiungi('testo',t)});
+  return out.map(x=>x?[x.tipo,...x.parti].join('\t'):'');
+}
+/* I menu a tendina di un foglio: per ogni colonna i valori fra cui scegliere,
+   oppure null. `libero` lascia scrivere anche altro (una squadra nuova). */
+const SI_NO={valori:['sì','no']};
+function menuColonne(colonne,perNome){return colonne.map(c=>perNome[c]||null)}
+const nomiSquadre=D=>(D.set.squadre||[]).map(x=>x.nome);
+
 const MODELLI_EXCEL={
  articoli:{
   nome:'Articoli e magazzino',
   foglio:'Articoli',
   colonne:['Articolo','Ha un numero','Taglia','Quantità','Codice','Stagione'],
   info:['Codice taglia','Nome visualizzato','Consegnati','Prenotati','Ordinati','Magazzino finale'],
+  menu:()=>({'Ha un numero':SI_NO}),
   obbligatorie:['Articolo','Taglia'],
   voci:{creati:['articolo nuovo','articoli nuovi'],aggiornati:['riga di magazzino nuova','righe di magazzino nuove']},
   istruzioni:[
@@ -2854,6 +3022,7 @@ const MODELLI_EXCEL={
    '',
    'Una riga per ogni articolo e taglia. Le righe dello stesso articolo vanno vicine.',
    '',
+   'Colonne:',
    'Articolo      il nome, per esempio: TEE NERA ALLENAMENTO, BORSONE U14',
    'Ha un numero  sì solo per le divise da gara, che hanno il numero stampato;',
    '              per tutto il resto vuoto oppure no.',
@@ -2868,6 +3037,7 @@ const MODELLI_EXCEL={
    'Le colonne Codice taglia, Nome visualizzato, Consegnati, Prenotati, Ordinati e',
    'Magazzino finale sono solo informative: al caricamento vengono ignorate.',
    '',
+   'Caricamento:',
    'Il caricamento aggiunge soltanto: un articolo o una giacenza già presenti non',
    'vengono modificati. Per correggere una giacenza si usa «Correggi giacenza» in',
    'Magazzino. Prima di caricare il programma mostra cosa verrà aggiunto e quali',
@@ -2935,6 +3105,7 @@ const MODELLI_EXCEL={
   foglio:'Atleti',
   colonne:['Squadra','Cognome','Nome','Note','Attivo'],
   info:['Divise','In uscita','Gioca anche in'],
+  menu:D=>({Squadra:{valori:nomiSquadre(D),libero:true},Attivo:SI_NO}),
   obbligatorie:['Squadra','Cognome','Nome'],
   voci:{creati:['atleta nuovo','atleti nuovi']},
   istruzioni:[
@@ -2943,6 +3114,7 @@ const MODELLI_EXCEL={
    'Una riga per atleta. Le squadre che non esistono vengono create,',
    'nell\'ordine in cui compaiono qui, in fondo all\'ordine di distribuzione.',
    '',
+   'Colonne:',
    'Squadra   per esempio: UNDER 14, PRIMA SQUADRA',
    'Cognome   obbligatorio',
    'Nome      obbligatorio',
@@ -2952,9 +3124,11 @@ const MODELLI_EXCEL={
    'Le colonne Divise, In uscita e Gioca anche in sono solo informative: al',
    'caricamento vengono ignorate.',
    '',
+   'Caricamento:',
    'Un atleta già presente nella stessa squadra viene ignorato: il caricamento',
    'ripetuto dello stesso foglio non crea doppioni e non modifica i dati esistenti.',
    '',
+   'Dati personali:',
    'Non inserire indirizzi email, numeri di telefono o date delle visite mediche:',
    'il programma non li utilizza e si tratta di dati di atleti spesso minorenni.',
    'Una nota che sembra contenere un recapito non viene caricata.'],
@@ -3000,8 +3174,9 @@ const MODELLI_EXCEL={
  divise:{
   nome:'Divise da gara',
   foglio:'Divise',
-  colonne:['Modello','Taglia','Numero','Squadra','Cognome','Nome','Da cambiare','Note'],
+  colonne:['Modello','Taglia','Numero','Squadra','Cognome','Nome','Da cambiare','Note','Tipo'],
   info:['Stato','Prenotata per'],
+  menu:D=>({Modello:{valori:D.set.modelli||['STANDARD'],libero:true},Squadra:{valori:nomiSquadre(D),libero:true},'Da cambiare':SI_NO,Tipo:{valori:['gara','libero']}}),
   obbligatorie:['Taglia','Numero'],
   voci:{creati:['divisa nuova','divise nuove']},
   istruzioni:[
@@ -3010,22 +3185,27 @@ const MODELLI_EXCEL={
    'Una riga per ogni capo fisico. Due divise con lo stesso numero ma taglia',
    'diversa sono due capi diversi, ed è normale averle entrambe.',
    '',
-   'Modello       il lotto: STANDARD per le divise normali, LIBERO per le maglie',
-   '              da libero, comuni a tutte le squadre. Altri nomi creano altri',
-   '              lotti (per esempio PRIMA SQUADRA): nella schermata Squadre si',
-   '              indica sulla riga di ogni squadra quale lotto utilizza.',
-   'Taglia        XXS, XS, S, M, L, XL, XXL',
-   'Numero        il numero stampato sulla maglia, da 0 a 99',
-   'Squadra       vuoto se la divisa è in magazzino. Se è assegnata a un atleta,',
-   'Cognome       indicarne squadra, cognome e nome: deve essere un atleta',
-   'Nome          già caricato con il foglio Atleti.',
-   'Da cambiare   sì se l\'atleta la sta restituendo (taglia sbagliata, cambio',
-   '              squadra): il numero resta libero per la sua squadra.',
-   'Note          facoltativo',
+   'Colonne:',
+   'Modello                  il lotto: STANDARD per le divise normali, LIBERO per le',
+   '                         maglie da libero. Altri nomi creano altri lotti (per',
+   '                         esempio PRIMA SQUADRA, LIBERO GIOVANILI); ogni squadra',
+   '                         sceglie quale lotto usa, in Magazzino -> Divise oppure',
+   '                         sulla sua riga in Squadre.',
+   'Taglia                   XXS, XS, S, M, L, XL, XXL',
+   'Numero                   il numero stampato sulla maglia, da 0 a 99',
+   'Squadra, Cognome, Nome   vuoti se la divisa è in magazzino. Per una divisa',
+   '                         assegnata: l\'atleta, già caricato con il foglio Atleti.',
+   'Da cambiare              sì se l\'atleta la sta restituendo (taglia sbagliata,',
+   '                         cambio squadra): il numero resta libero per la sua squadra.',
+   'Note                     facoltativo',
+   'Tipo                     facoltativo, per un lotto nuovo: gara oppure libero. Se',
+   '                         manca, un lotto il cui nome contiene LIBERO è di maglie',
+   '                         da libero.',
    '',
    'Le colonne Stato e Prenotata per sono solo informative: al caricamento',
    'vengono ignorate.',
    '',
+   'Numeri doppi:',
    'All\'interno di una squadra un numero non si ripete: una divisa con un numero',
    'già in uso nella squadra dell\'atleta viene caricata e segnalata come numero doppio.'],
   righe(){const D=derive();
@@ -3033,11 +3213,11 @@ const MODELLI_EXCEL={
    .sort((a,b)=>(a[1].modello||'').localeCompare(b[1].modello||'')||szIdx(a[1].taglia)-szIdx(b[1].taglia)||a[1].numero-b[1].numero)
    .map(([id,d])=>{const a=d.holder?S.atlete[d.holder]:null;const pr=D.prenDivisa[id];
     return [d.modello||'STANDARD',d.taglia,String(d.numero),a?a.squadra:'',a?a.cognome:'',a?a.nome:'',
-     d.daRestituire?'sì':'',d.note||'',
+     d.daRestituire?'sì':'',d.note||'',tipoLotto(d.modello),
      !d.holder?'in magazzino':d.daRestituire?'da cambiare':'in uso',pr&&S.richieste[pr]?fullName(S.atlete[S.richieste[pr].atletaId]):'']})},
   async applica(righe,prova,nr=riga0){
    const D=derive();const r=nuovoEsito();
-   const modelli=[...(D.set.modelli||['STANDARD'])];
+   const modelli=[...(D.set.modelli||['STANDARD'])];const tipiNuovi={};
    const perNome=indiceAtleti();
    // Il capo si riconosce da modello, taglia, numero **e da chi lo tiene**: due
    // liberi di squadre diverse possono portare lo stesso numero, ed e' normale.
@@ -3046,7 +3226,7 @@ const MODELLI_EXCEL={
    // I numeri in uso in ogni squadra, compresi quelli caricati da questo foglio.
    const inUso={};
    for(const d of Object.values(S.divise)){if(d.dismessa||!d.holder||d.daRestituire)continue;const a=S.atlete[d.holder];if(!a)continue;
-     (inUso[a.squadra]=inUso[a.squadra]||new Map()).set(Number(d.numero),d.holder)}
+     (inUso[serieNumeri(D,a.squadra)]=inUso[serieNumeri(D,a.squadra)]||new Map()).set(Number(d.numero),d.holder)}
    const visti=new Set();
    for(const [i,riga] of righe.entries()){
     const q=nr(i);
@@ -3058,6 +3238,8 @@ const MODELLI_EXCEL={
     if(num===null){r.problemi.push(`${q}: manca il numero`);continue}
     if(Number.isNaN(num)){r.problemi.push(`${q}: numero "${COL(riga,2)}" non valido: serve un numero intero da 0 a 99`);continue}
     if(!siNoValido(COL(riga,6))){r.problemi.push(`${q}: «Da cambiare» vale "${COL(riga,6)}"; valori ammessi: sì, no oppure vuoto`);continue}
+    const tipoScritto=norm(COL(riga,8));
+    if(tipoScritto&&!['gara','libero'].includes(tipoScritto)){r.problemi.push(`${q}: tipo "${COL(riga,8)}" non ammesso (ammessi: gara, libero)`);continue}
     if(!SZ.includes(tg))r.avvisi.push(`${q}: taglia ${tg} non fra quelle consuete (${SZ.join(', ')})`);
     const sq=COL(riga,3).toUpperCase();const cog=COL(riga,4);const nom=COL(riga,5);
     let holder=null;
@@ -3073,17 +3255,20 @@ const MODELLI_EXCEL={
     visti.add(k);
     if(gia.has(k)){r.saltati++;continue}
     const daCambiare=SI(COL(riga,6));
-    if(holder&&!daCambiare&&!D.comuni.has(mod)){const sqA=S.atlete[holder].squadra;const chi=inUso[sqA]&&inUso[sqA].get(num);
+    if(holder&&!daCambiare){const sqA=S.atlete[holder].squadra;const kS=serieNumeri(D,sqA);const chi=inUso[kS]&&inUso[kS].get(num);
       // La maglia esiste davvero: si carica, ma il numero doppio si segnala
       // (e poi resta evidenziato in squadra finche' non si sistema).
       if(chi&&chi!==holder)r.avvisi.push(`${q}: in ${teamLabel(sqA)} il n.${num} è già di ${fullName(S.atlete[chi])}: la divisa viene caricata, ma il numero risulterà doppio in squadra`);
-      (inUso[sqA]=inUso[sqA]||new Map()).set(num,holder)}
+      (inUso[kS]=inUso[kS]||new Map()).set(num,holder)}
     if(holder&&Object.values(S.divise).some(d=>!d.dismessa&&!d.holder&&(d.modello||'STANDARD')===mod&&KEY(d.taglia)===KEY(tg)&&Number(d.numero)===num))
       r.avvisi.push(`${q}: una ${tg} n.${num} ${cap(mod)} risulta anche in magazzino: verificare che non sia lo stesso capo contato due volte`);
-    if(!modelli.includes(mod)){modelli.push(mod);r.lottiNuovi.push(mod)}
+    if(!modelli.includes(mod)){modelli.push(mod);r.lottiNuovi.push(mod);
+      tipiNuovi[mod]=tipoScritto||(/LIBERO/.test(mod)?'libero':'gara')}
+    else if(tipoScritto&&tipoScritto!==(tipiNuovi[mod]||tipoLotto(mod)))r.avvisi.push(`${q}: il lotto ${mod} è di ${TIPI_MAGLIA[tipiNuovi[mod]||tipoLotto(mod)]}: il tipo indicato viene ignorato`);
     if(!prova)await S.db.collection('divise').add({taglia:tg,numero:num,modello:mod,holder,daRestituire:daCambiare,note:COL(riga,7)});
     r.creati++}
-   if(!prova&&r.lottiNuovi.length)await S.db.doc('settings/main').update({modelli});
+   if(!prova&&r.lottiNuovi.length){const tipi={...(D.set.tipiLotto||{})};for(const m of D.set.modelli||[])if(!tipi[m])tipi[m]=tipoLotto(m);
+     await S.db.doc('settings/main').update({modelli,tipiLotto:{...tipi,...tipiNuovi}})}
    return r}},
 
  richieste:{
@@ -3091,6 +3276,7 @@ const MODELLI_EXCEL={
   foglio:'Richieste',
   colonne:['Squadra','Cognome','Nome','Articolo','Taglia','Numero desiderato','Note','Tipo di divisa'],
   info:['Esito','Numero proposto','Motivo'],
+  menu:D=>({Squadra:{valori:nomiSquadre(D)},Articolo:{valori:(D.set.articoli||[]).map(a=>a.nome)},'Tipo di divisa':{valori:['LIBERO']}}),
   obbligatorie:['Squadra','Cognome','Nome','Articolo'],
   voci:{creati:['richiesta nuova','richieste nuove']},
   istruzioni:[
@@ -3099,6 +3285,7 @@ const MODELLI_EXCEL={
    'Una riga per ogni articolo che un atleta deve ricevere. È il foglio che i',
    'dirigenti di squadra possono compilare e rimandare indietro.',
    '',
+   'Colonne:',
    'Squadra, Cognome, Nome   devono corrispondere a un atleta già inserito.',
    'Articolo                 il nome, il codice corto (A001) o il nome come appare',
    '                         nel programma.',
@@ -3111,6 +3298,7 @@ const MODELLI_EXCEL={
    'Le colonne Esito, Numero proposto e Motivo sono solo informative: al',
    'caricamento vengono ignorate.',
    '',
+   'Caricamento:',
    'Le righe che non corrispondono a nessun atleta o articolo vengono segnalate e',
    'non caricate. Una richiesta uguale a una già aperta, o di un articolo già',
    'consegnato in questa stagione, viene ignorata.'],
@@ -3149,17 +3337,17 @@ const MODELLI_EXCEL={
     if(Number.isNaN(numero)){r.problemi.push(`${q}: numero desiderato "${COL(riga,5)}" non valido: serve un numero intero da 0 a 99`);continue}
     if(numero!==null&&!a.conNumero)r.avvisi.push(`${q}: ${artLabel(a.nome)} non ha il numero stampato: il numero desiderato viene ignorato`);
     const tipo=COL(riga,7).toUpperCase();
-    if(tipo&&(!a.conNumero||!D.comuni.has(tipo))){r.problemi.push(`${q}: tipo di divisa "${tipo}" non ammesso${a.conNumero?` (ammessi: ${[...D.comuni].join(', ')} oppure vuoto)`:': l\'articolo non è una divisa'}`);continue}
+    if(tipo&&(!a.conNumero||!(tipo==='LIBERO'||D.comuni.has(tipo)))){r.problemi.push(`${q}: tipo di divisa "${tipo}" non ammesso${a.conNumero?' (ammessi: LIBERO per una maglia da libero, oppure vuoto)':': l\'articolo non è una divisa'}`);continue}
     const at=S.atlete[aid];
     if(at.inUscita||at.attiva===false)r.avvisi.push(`${q}: ${cog} ${nom} è ${at.inUscita?'in uscita':'non attivo'}: la richiesta non verrà servita`);
     if(a.distribuibile===false)r.avvisi.push(`${q}: ${artLabel(a.nome)} non è più in distribuzione: la richiesta resterà esclusa`);
-    const nuova={atletaId:aid,articolo:a.nome,modello:a.conNumero?tipo:'',taglia:tg,numeroDesiderato:a.conNumero?numero:null,note:COL(riga,6)};
+    const nuova={atletaId:aid,articolo:a.nome,modello:a.conNumero&&tipo?D.lottiLibero[0]:'',taglia:tg,numeroDesiderato:a.conNumero?numero:null,note:COL(riga,6)};
     const k=chiave(nuova);
     if(visti.has(k)){r.avvisi.push(`${q}: la stessa richiesta compare più volte nel foglio: riga ignorata`);r.saltati++;continue}
     visti.add(k);
     if(gia.has(k)){r.saltati++;continue}
     if(consegnati.has(KEY(aid+'|'+a.nome+'|'+(a.conNumero?'':tg)))){r.avvisi.push(`${q}: ${cog} ${nom} ha già ricevuto ${artLabel(a.nome)} in questa stagione: richiesta non creata`);r.saltati++;continue}
-    if(a.conNumero&&numero!==null){const chi=Object.values(S.divise).find(d=>!d.dismessa&&d.holder&&d.holder!==aid&&!d.daRestituire&&S.atlete[d.holder]&&S.atlete[d.holder].squadra===at.squadra&&Number(d.numero)===numero);
+    if(a.conNumero&&numero!==null){const chi=Object.values(S.divise).find(d=>!d.dismessa&&d.holder&&d.holder!==aid&&!d.daRestituire&&S.atlete[d.holder]&&stessaSerie(D,S.atlete[d.holder].squadra,at.squadra)&&Number(d.numero)===numero);
       if(chi)r.avvisi.push(`${q}: in ${teamLabel(at.squadra)} il n.${numero} è già di ${fullName(S.atlete[chi.holder])}: verrà proposto un altro numero`)}
     if(!prova)await S.db.collection('richieste').add({...nuova,ordine:++ordine});
     r.creati++}
@@ -3204,15 +3392,35 @@ const modArticoli=D=>(D.set.articoli||[]).filter(a=>{
   return !(righe.length&&righe.every(m=>m.precedente))});
 const modConTaglie=a=>(a.taglie||[]).filter(t=>t&&t!=='UNICA').length>0;
 
+/* L'intestazione del modulo e' su due righe: sopra il nome dell'articolo,
+   su una casella unita, sotto le sue colonne, Risposta e (se l'articolo ha
+   le taglie) Taglia, cioe' la taglia da consegnare. Cognome, Nome, Numero
+   maglia e Note occupano le due righe. modColonne da' la riga di sotto,
+   modGruppi quella di sopra (vuoto = colonna senza articolo). */
+const MOD_RISPOSTA='Risposta',MOD_TAGLIA='Taglia';
 function modColonne(D){
   const c=['Cognome','Nome','Numero maglia'];
-  for(const a of modArticoli(D)){
-    const et=artLabel(a.nome);
-    c.push(et);
-    if(modConTaglie(a)){c.push(et+' taglia');c.push(et+' taglia richiesta')}
-  }
+  for(const a of modArticoli(D)){c.push(MOD_RISPOSTA);if(modConTaglie(a))c.push(MOD_TAGLIA)}
   c.push('Note');
   return c;
+}
+function modGruppi(D){
+  const g=['','',''];
+  for(const a of modArticoli(D)){const et=artLabel(a.nome);g.push(et);if(modConTaglie(a))g.push(et)}
+  g.push('');
+  return g;
+}
+
+/* I menu a tendina del modulo, colonna per colonna come modColonne: la
+   risposta per ogni articolo e le sue taglie. */
+function modMenu(D){
+  const m=[null,null,null];
+  for(const a of modArticoli(D)){
+    m.push({valori:MOD_RISPOSTE});
+    if(modConTaglie(a))m.push({valori:(a.taglie||[]).filter(Boolean)});
+  }
+  m.push(null);
+  return m;
 }
 
 /* Il foglio esce gia' con dentro gli atleti che il programma conosce, e il
@@ -3227,7 +3435,7 @@ function modRighe(D,squadra){
       const divisa=(D.perAtleta[id]||[]).map(x=>S.divise[x])
         .find(x=>x&&(x.modello||'STANDARD')===(D.lotto[squadra]||'STANDARD'));
       const riga=[a.cognome,a.nome,divisa?String(divisa.numero):''];
-      for(const art of arts){riga.push('');if(modConTaglie(art)){riga.push('');riga.push('')}}
+      for(const art of arts){riga.push('');if(modConTaglie(art))riga.push('')}
       riga.push(a.note||'');
       return riga});
 }
@@ -3240,8 +3448,13 @@ function modIstruzioni(D){
    'non va riscritto su ogni riga. Le squadre e gli atleti non presenti vengono',
    'creati al caricamento del file.',
    '',
-   'In ogni casella di un articolo va indicata una di queste tre risposte:',
+   'Articoli:',
+   'Ogni articolo ha il suo nome in alto e, sotto, due colonne: Risposta e',
+   'Taglia. Gli articoli senza taglie hanno solo la Risposta.',
    '',
+   'Risposte:',
+   'Nella colonna Risposta si sceglie dal menu a tendina una di queste tre',
+   'risposte:',
    '   ce l’ho       l’atleta lo possiede già: non viene creata alcuna richiesta',
    '   mi manca      l’atleta ne ha bisogno: viene creata una richiesta',
    '   da cambiare   va sostituito: viene creata una richiesta e il capo attuale',
@@ -3250,21 +3463,20 @@ function modIstruzioni(D){
    'La casella vuota equivale a "ce l’ho".',
    '',
    'Colonne:',
-   '',
-   'Cognome, Nome                 obbligatori',
-   'Numero maglia                 il numero attuale, non quello richiesto',
-   '<articolo>                    una delle tre risposte',
-   '<articolo> taglia             la taglia attuale',
-   '<articolo> taglia richiesta   la taglia desiderata, se diversa',
-   'Note                          informazioni che non trovano posto nelle caselle',
-   '',
-   'Se la taglia richiesta è vuota vale la taglia attuale.',
+   'Cognome, Nome   obbligatori',
+   'Numero maglia   il numero attuale, non quello richiesto',
+   'Risposta        ce l’ho, mi manca oppure da cambiare, dal menu',
+   'Taglia          la taglia da consegnare, dal menu: va indicata per «mi manca»',
+   '                e «da cambiare»; con «ce l’ho» resta vuota',
+   'Note            informazioni che non trovano posto nelle caselle',
    '',
    'Articoli in questo modulo: '+arts.map(a=>artLabel(a.nome)).join(', '),
    '',
+   'Caricamento:',
    'Il caricamento ripetuto dello stesso file non crea duplicati: gli atleti già',
    'presenti, le richieste uguali e gli articoli già consegnati vengono ignorati.',
    '',
+   'Dati personali:',
    'Non inserire indirizzi email, numeri di telefono o date delle visite mediche:',
    'il programma non li utilizza e si tratta di dati di atleti spesso minorenni.'];
 }
@@ -3284,12 +3496,14 @@ async function scaricaModulo(){
     toast(`Due articoli hanno lo stesso nome visualizzato (${quali.join(' e ')}): occorre cambiare l’etichetta di uno dei due, altrimenti il modulo non può essere riletto`);return}
   const colonne=modColonne(D);
   const nomiFogli=fogliSquadre(squadre.map(s=>s.nome));
-  const fogli=squadre.map((s,i)=>({nome:nomiFogli[i],intestazioni:colonne,righe:modRighe(D,s.nome)}));
+  const menu=modMenu(D);
+  const gruppi=modGruppi(D);
+  const fogli=squadre.map((s,i)=>({nome:nomiFogli[i],intestazioni:colonne,gruppi,righe:modRighe(D,s.nome),menu}));
   let dove;
   try{dove=await window.__APP.scegliDoveSalvare(`modulo-distribuzione-${today()}.xlsx`)}
   catch(e){toast('Apertura della finestra di salvataggio non riuscita: '+e);return}
   if(!dove)return;
-  try{await window.__APP.scriviExcelFogli(dove,fogli,modIstruzioni(D))}
+  try{await window.__APP.scriviExcelFogli(dove,fogli,guidaPerExcel(modIstruzioni(D)))}
   catch(e){toast('Scrittura del file non riuscita: '+e);return}
   toast(`Modulo salvato: ${fogli.length} ${fogli.length===1?'squadra':'squadre'}`);
 }
@@ -3328,9 +3542,31 @@ async function caricaModulo(){
     if(!squadra){squadra=String(nomeFoglio).trim().toUpperCase();squadreNuove.add(squadra)}
     const i0=righe.findIndex(r=>r.some(c=>KEY(c)===KEY('Cognome')));
     if(i0<0){problemi.push(`foglio ${nomeFoglio}: non trovo la riga dei titoli`);continue}
-    const titoli=righe[i0].map(c=>String(c||'').trim());
+    // Intestazione su due righe (sopra l'articolo, sotto Risposta e Taglia)
+    // oppure su una sola, come nei moduli di prima ("Felpa", "Felpa taglia",
+    // "Felpa taglia richiesta"): si leggono tutti e due.
+    const sotto=righe[i0+1]||[];
+    const dueRighe=sotto.some(c=>KEY(c)===KEY(MOD_RISPOSTA));
+    const larga=Math.max(righe[i0].length,dueRighe?sotto.length:0);
+    let gruppo='';
+    const colonne=Array.from({length:larga},(_,k)=>{
+      const su=String(righe[i0][k]??'').trim();
+      if(!dueRighe)return{t:su};
+      const giu=String(sotto[k]??'').trim();
+      // senza niente sotto e' una colonna alta due righe (Cognome, Note...)
+      if(!giu){gruppo='';return{t:su}}
+      // la casella unita ha il nome solo nella prima colonna: vale per le
+      // colonne che seguono finche' non ne comincia un altro
+      if(su)gruppo=su;
+      return{t:giu,gruppo}});
     // ogni colonna: cosa vuol dire
-    const mappa=titoli.map(t=>{
+    const mappa=colonne.map(({t,gruppo})=>{
+      if(gruppo!==undefined){
+        const art=perTitolo[KEY(gruppo)];const k=KEY(t);
+        if(art&&k===KEY(MOD_RISPOSTA))return{tipo:'risposta',art};
+        if(art&&k.startsWith(KEY(MOD_TAGLIA)))return{tipo:'tagliaRic',art};
+        if(gruppo||t)colonneIgnote.add(gruppo?`${gruppo} (${t})`:t);
+        return{tipo:'?'}}
       const k=KEY(t);
       if(k===KEY('Cognome'))return{tipo:'cognome'};
       if(k===KEY('Nome'))return{tipo:'nome'};
@@ -3348,7 +3584,7 @@ async function caricaModulo(){
       return{tipo:'?'}});
     if(!mappa.some(m=>m.tipo==='cognome')){problemi.push(`foglio ${nomeFoglio}: manca la colonna Cognome`);continue}
 
-    for(let i=i0+1;i<righe.length;i++){
+    for(let i=i0+(dueRighe?2:1);i<righe.length;i++){
       const riga=righe[i];const dati={squadra,articoli:{},note:''};
       mappa.forEach((m,c)=>{const v=String(riga[c]??'').trim();
         if(m.tipo==='cognome')dati.cognome=v;
@@ -3481,7 +3717,9 @@ async function scaricaModello(tipo){
   try{
     const dove=await window.__APP.scegliDoveSalvare(`${m.foglio.toLowerCase()}-${today()}.xlsx`);
     if(!dove)return;
-    await window.__APP.scriviExcel(dove,m.foglio,[...m.colonne,...(m.info||[])],m.righe().map(r=>r.map(c=>c==null?'':String(c))),m.istruzioni);
+    const colonne=[...m.colonne,...(m.info||[])];
+    await window.__APP.scriviExcel(dove,m.foglio,colonne,m.righe().map(r=>r.map(c=>c==null?'':String(c))),guidaPerExcel(m.istruzioni),
+      m.menu?menuColonne(colonne,m.menu(derive())):null);
     toast('Foglio salvato');
   }catch(e){toast('Scrittura del file non riuscita: '+e)}
 }
@@ -3500,8 +3738,8 @@ async function scaricaMovimenti(){
     if(!dove)return;
     await window.__APP.scriviExcel(dove,'Movimenti',
       ['Data','Tipo','Atleta o destinatario','Squadra','Codice','Articolo','Taglia','Numero','Quantità','Stagione','Nota'],righe,
-      ['MOVIMENTI — il registro di consegne, rientri, carichi e rettifiche, dal più vecchio.',
-       '',`${righe.length} movimenti al ${fmtDate(today())}. Il foglio è solo da consultare: non si ricarica.`]);
+      guidaPerExcel(['MOVIMENTI — il registro di consegne, rientri, carichi e rettifiche, dal più vecchio.',
+       '',`${righe.length} movimenti al ${fmtDate(today())}. Il foglio è solo da consultare: non si ricarica.`]));
     toast('Foglio salvato');
   }catch(e){toast('Scrittura del file non riuscita: '+e)}
 }

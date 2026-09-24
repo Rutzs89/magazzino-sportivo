@@ -279,20 +279,29 @@ const carica = async (tipo, righe) => {
   ok(modulo.scritto && modulo.scritto.fogli.length === w.eval("derive().perServire.length"),
     "il modulo esce con un foglio per squadra");
   const f0 = modulo.scritto.fogli[0];
-  const tit = f0.intestazioni;
-  // un articolo con le taglie che il primo atleta del foglio non ha ancora chiesto
-  const scelta = w.eval(`(()=>{const D=derive();const tit=${JSON.stringify(tit)};const r0=${JSON.stringify(f0.righe[0])};
+  const tit = f0.intestazioni, gru = f0.gruppi;
+  ok(gru.length === tit.length && tit.filter((t) => t === "Risposta").length === w.eval("modArticoli(derive()).length"),
+    "il modulo ha un articolo per gruppo: Risposta e, se ha le taglie, Taglia");
+  ok(!tit.some((t) => /taglia richiesta/i.test(t)), "la colonna della taglia attuale non c'è più");
+  // Come Excel restituisce l'intestazione su due righe: la casella unita
+  // dell'articolo ha il nome solo nella prima colonna; Cognome, Nome, Note
+  // stanno sopra e sotto non hanno niente.
+  const su = tit.map((t, k) => (!gru[k] ? t : k > 0 && gru[k - 1] === gru[k] ? "" : gru[k]));
+  const giu = tit.map((t, k) => (gru[k] ? t : ""));
+  // un articolo con le taglie che l'atleta della riga non ha ancora chiesto
+  const sceltaPer = (r0) => w.eval(`(()=>{const D=derive();const tit=${JSON.stringify(tit)};const gru=${JSON.stringify(gru)};const r0=${JSON.stringify(r0)};
     const sq=${JSON.stringify(f0.nome)};
     const aid=Object.keys(S.atlete).find(k=>S.atlete[k].squadra===sq&&S.atlete[k].cognome===r0[0]&&S.atlete[k].nome===r0[1]);
-    for(let i=0;i<tit.length;i++){const a=articoloDaNome(D,tit[i]);if(!a||!tit.includes(tit[i]+' taglia'))continue;
+    for(let i=0;i<tit.length;i++){if(tit[i]!=='Risposta'||tit[i+1]!=='Taglia'||gru[i+1]!==gru[i])continue;const a=articoloDaNome(D,gru[i]);if(!a)continue;
       if(Object.values(S.richieste).some(r=>r.atletaId===aid&&r.articolo===a.nome))continue;
-      return {i,taglia:a.taglie[0]}}return null})()`);
+      return {i,taglia:a.taglie[0],et:gru[i]}}return null})()`);
+  const scelta = sceltaPer(f0.righe[0]);
   const riga = [...f0.righe[0]];
   riga[scelta.i] = "mi manca";
-  riga[tit.indexOf(tit[scelta.i] + " taglia")] = String(scelta.taglia).toLowerCase();
+  riga[scelta.i + 1] = String(scelta.taglia).toLowerCase();
   const riga2 = [...f0.righe[1]];
   riga2[scelta.i] = "non mi manca";
-  modulo.daLeggere = [[f0.nome, [tit, riga, riga2]], [f0.nome + " (2)", [tit, riga]]];
+  modulo.daLeggere = [[f0.nome, [su, giu, riga, riga2]], [f0.nome + " (2)", [su, giu, riga]]];
   const ricPrimaModulo = Object.keys(w.eval("S.richieste")).length;
   await w.eval("caricaModulo()");
   await attendi(900);
@@ -303,6 +312,20 @@ const carica = async (tipo, righe) => {
   await w.eval("caricaModulo()");
   await attendi(900);
   ok(Object.keys(w.eval("S.richieste")).length === ricDopoModulo, "ricaricando lo stesso modulo non nasce niente di nuovo");
+  // Un modulo di prima, a tre colonne per articolo su una riga sola, si legge ancora.
+  {
+    const r3 = f0.righe[2];
+    const s3 = sceltaPer(r3);
+    const vecchio = ["Cognome", "Nome", "Numero maglia", s3.et, s3.et + " taglia", s3.et + " taglia richiesta", "Note"];
+    modulo.daLeggere = [[f0.nome, [vecchio, [r3[0], r3[1], "", "mi manca", "", String(s3.taglia), ""]]]];
+    const prima = Object.keys(w.eval("S.richieste")).length;
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    const nuova = Object.values(w.eval("S.richieste")).find((r) => r.articolo === w.eval(`articoloDaNome(derive(),${JSON.stringify(s3.et)}).nome`) &&
+      w.eval(`S.atlete[${JSON.stringify(r.atletaId)}].cognome`) === r3[0]);
+    ok(Object.keys(w.eval("S.richieste")).length === prima + 1 && nuova && nuova.taglia === s3.taglia,
+      "un modulo vecchio, con la taglia attuale e quella richiesta, viene ancora letto");
+  }
 
   /* 10. i quattro fogli: scaricati dal programma e ricaricati tali e quali */
   const conta = () => ({
@@ -393,6 +416,52 @@ const carica = async (tipo, righe) => {
     fogli.every((f, k) => f.intestazioni.length === w.eval(`MODELLI_EXCEL.${TIPI[k]}.colonne.length+(MODELLI_EXCEL.${TIPI[k]}.info||[]).length`)),
     "ogni foglio esce con le colonne da caricare e quelle solo informative",
   );
+  /* 12b. menu a tendina e istruzioni impaginate */
+  // Per guardare i file veri: SALVA_FOGLI=<cartella> scrive qui quello che
+  // arriverebbe alla parte Rust (lo usa la prova `scrive_i_fogli_salvati`).
+  if (process.env.SALVA_FOGLI) {
+    fs.writeFileSync(path.join(process.env.SALVA_FOGLI, "fogli.json"), JSON.stringify({ fogli, modulo: modulo.scritto }));
+  }
+  {
+    const tutti = [...fogli, ...modulo.scritto.fogli];
+    ok(tutti.every((f) => f.menu == null || f.menu.length === f.intestazioni.length),
+      "i menu a tendina sono allineati alle colonne di ogni foglio");
+    const menuDi = (f, titolo) => f.menu && f.menu[f.intestazioni.indexOf(titolo)];
+    const menuArt = (f, et, titolo) => f.menu && f.menu[f.intestazioni.findIndex((t, k) => f.gruppi[k] === et && t === titolo)];
+    const div = fogli[TIPI.indexOf("divise")];
+    ok(JSON.stringify(menuDi(div, "Da cambiare").valori) === '["sì","no"]' &&
+       JSON.stringify(menuDi(div, "Tipo").valori) === '["gara","libero"]' && menuDi(div, "Modello").libero === true,
+      "foglio Divise: menu per Da cambiare, Tipo e Modello (questo accetta anche un lotto nuovo)");
+    ok(!menuDi(div, "Numero") && !menuDi(div, "Note"), "le colonne da scrivere liberamente restano senza menu");
+    // ogni valore dei menu viene poi accettato al caricamento
+    ok(w.eval("['sì','no'].every(siNoValido)"), "sì e no del menu sono valori ammessi");
+    const f0m = modulo.scritto.fogli[0];
+    const arts = w.eval("modArticoli(derive()).map(a=>({et:artLabel(a.nome),taglie:modConTaglie(a)?a.taglie.filter(Boolean):null,nome:a.nome}))");
+    const risposteOk = arts.every((a) => {
+      const m = menuArt(f0m, a.et, "Risposta");
+      return m && m.valori.length === 3 && m.valori.every((v) => w.eval(`modRisposta(${JSON.stringify(v)})`) !== "?");
+    });
+    ok(risposteOk, `modulo: ogni articolo ha il menu delle tre risposte, tutte riconosciute al caricamento (${arts.length} articoli)`);
+    const taglieOk = arts.filter((a) => a.taglie).every((a) => {
+      const m1 = menuArt(f0m, a.et, "Taglia");
+      return m1 && JSON.stringify(m1.valori) === JSON.stringify(a.taglie) &&
+        a.taglie.every((t) => w.eval(`tagliaArticolo((derive().set.articoli||[]).find(x=>x.nome===${JSON.stringify(a.nome)}),${JSON.stringify(t)})`));
+    });
+    ok(taglieOk, "modulo: la colonna Taglia ha il menu con le taglie dell'articolo, tutte accettate");
+    ok(!menuDi(f0m, "Cognome") && !menuDi(f0m, "Note"), "modulo: nomi e note restano da scrivere");
+    const guide = [...fogli.map((f) => f.istruzioni), modulo.scritto.istruzioni];
+    const TIPI_RIGA = ["titolo", "sezione", "voce", "testo"];
+    const guideOk = guide.every((g) => g[0].startsWith("titolo\t") && g.every((r) => {
+      if (r === "") return true;
+      const p = r.split("\t");
+      return TIPI_RIGA.includes(p[0]) && p.slice(1).every((x) => x.trim()) && (p[0] !== "voce" || p.length === 3);
+    }));
+    ok(guideOk, "le istruzioni arrivano impaginate: titolo, sezioni, voci con nome e spiegazione, paragrafi");
+    ok(guide.every((g) => g.some((r) => r.startsWith("sezione\tColonne"))), "ogni foglio da compilare ha la sezione Colonne");
+    // nessuna spiegazione spezzata a meta' (una voce che finisce con una virgola)
+    const spezzate = guide.flat().filter((r) => r.startsWith("voce\t") && /[,(]$/.test(r.trim()));
+    ok(spezzate.length === 0, "nessuna voce con la spiegazione spezzata" + (spezzate.length ? ": " + spezzate.join(" / ") : ""));
+  }
   await w.eval("scaricaMovimenti()");
   await attendi(200);
   const mov = fogliScritti["Movimenti"];

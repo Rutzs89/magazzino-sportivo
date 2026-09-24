@@ -291,5 +291,90 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   ok(!store.richieste[rid],'rispondendo sì viene eliminata');
   w.confirm=()=>true;}
 
+ // --- squadre che condividono i numeri (le due U17) ---
+ {w.confirm=()=>true;
+  const A='UNDER 17 NERA',B='UNDER 17 GIALLA';
+  w.location.hash='#squadre';w.eval("S.ui.atlTab='elenco';changed()");await wait(300);
+  const menu=w.document.getElementById('gn_'+A);
+  ok(!!menu,'sulla riga della squadra c\'è il menu dei numeri in comune');
+  menu.value=B;menu.dispatchEvent(new w.Event('change',{bubbles:true}));await wait(400);
+  const sq=()=>w.eval('S.settings.squadre');
+  const gA=sq().find(x=>x.nome===A).gruppoNumeri,gB=sq().find(x=>x.nome===B).gruppoNumeri;
+  ok(gA&&gA===gB,'scegliendo l\'altra squadra il collegamento vale per tutte e due');
+  const D5=w.eval('derive()');
+  ok(D5.occ[A]===D5.occ[B],'le due squadre vedono gli stessi numeri occupati');
+  // nessuna proposta usa, in una delle due, un numero in uso nell'altra
+  const inUso=new Map();for(const d of Object.values(store.divise)){if(d.dismessa||!d.holder||d.daRestituire)continue;const t=store.atlete[d.holder]&&store.atlete[d.holder].squadra;if(t===A||t===B)inUso.set(Number(d.numero),d.holder)}
+  const pestano=Object.entries(D5.prop).filter(([rid,pp])=>{if(!pp.divisaId)return false;const r=store.richieste[rid];const t=store.atlete[r.atletaId].squadra;if(t!==A&&t!==B)return false;
+    const n=Number(store.divise[pp.divisaId].numero);const chi=inUso.get(n);return chi&&chi!==r.atletaId&&store.divise[pp.divisaId].holder!==chi});
+  ok(pestano.length===0,`nessuna proposta prende un numero già in uso nell'altra squadra del gruppo (${pestano.length})`);
+  const perNumero={};for(const [rid,pp] of Object.entries(D5.prop)){if(!pp.divisaId)continue;const t=store.atlete[store.richieste[rid].atletaId].squadra;if(t!==A&&t!==B)continue;const n=store.divise[pp.divisaId].numero;perNumero[n]=(perNumero[n]||0)+1}
+  ok(Object.values(perNumero).every(v=>v===1),'nel gruppo nessun numero proposto due volte');
+  // un numero doppio fra le due squadre viene segnalato
+  const dA=Object.entries(store.divise).find(([,d])=>!d.dismessa&&d.holder&&!d.daRestituire&&store.atlete[d.holder]&&store.atlete[d.holder].squadra===A);
+  const dB=Object.entries(store.divise).find(([,d])=>!d.dismessa&&d.holder&&!d.daRestituire&&store.atlete[d.holder]&&store.atlete[d.holder].squadra===B);
+  const numB=store.divise[dB[0]].numero;store.divise[dB[0]]={...store.divise[dB[0]],numero:store.divise[dA[0]].numero};notify();await wait(200);
+  const dop=w.eval('conNumeroDoppio(derive())');
+  ok(dop[store.divise[dA[0]].holder]&&dop[store.divise[dB[0]].holder],'un numero uguale fra le due squadre del gruppo viene segnalato su tutte e due le atlete');
+  ok(w.eval('doppioniPerSerie(derive())').filter(x=>x.serie.includes('+')).length===1,'e compare una volta sola, con il nome del gruppo');
+  store.divise[dB[0]]={...store.divise[dB[0]],numero:numB};notify();await wait(200);
+  // sciogliere: tornano numeri propri tutte e due
+  const menu2=w.document.getElementById('gn_'+B);menu2.value='';menu2.dispatchEvent(new w.Event('change',{bubbles:true}));await wait(400);
+  ok(!sq().find(x=>x.nome===A).gruppoNumeri&&!sq().find(x=>x.nome===B).gruppoNumeri,'togliendo il collegamento da una delle due, il gruppo si scioglie');
+  ok(w.eval('derive()').occ[A]!==w.eval('derive()').occ[B],'e ognuna torna ai suoi numeri');}
+
+ // --- lotti di maglie da libero (giovanili e prima squadra) ---
+ {w.__rispostaConferme=true;
+  const sq=()=>w.eval('S.settings.squadre');const set=()=>w.eval('S.settings');
+  const OK=()=>w.document.querySelector('#dlgForm button[value="ok"]');
+  // una richiesta di maglia da libero su cui provare (se i dati non ne hanno, la si crea)
+  let ridL=Object.keys(store.richieste).find(k=>{const r=store.richieste[k];return r.modello&&w.eval(`tipoLotto(${JSON.stringify(r.modello)})`)==='libero'&&!r.consegnata&&store.atlete[r.atletaId]&&store.atlete[r.atletaId].squadra!=='PRIMA DIVISIONE'});
+  if(!ridL){const [k0,r0]=Object.entries(store.richieste).find(([k,r])=>!r.modello&&!r.consegnata&&store.atlete[r.atletaId]&&store.atlete[r.atletaId].squadra!=='PRIMA DIVISIONE'&&w.eval(`!!(derive().prop[${JSON.stringify(k)}]||{}).divisaId`));
+    ridL='provaLibero';store.richieste[ridL]={...r0,modello:'LIBERO'};notify();await wait(200)}
+  const esiti=()=>{const c={OK:0,MANCA:0,ESCLUSA:0};Object.values(w.eval('derive()').prop).forEach(p=>c[p.esito]++);return JSON.stringify(c)};
+  const esitiPrima=esiti();
+  const rL=store.richieste[ridL];const T=store.atlete[rL.atletaId].squadra;
+  w.location.hash='#magazzino';w.eval("S.ui.magTab='divise';render()");await wait(200);
+  ok(!!w.document.querySelector('[data-act="newLotto"]'),'in Magazzino -> Divise c\'è «Aggiungi lotto»');
+  ok(w.document.querySelectorAll('[data-act="modLotto"]').length>=3,'ogni lotto ha il suo «Modifica lotto»');
+  w.document.querySelector('[data-act="newLotto"]').click();await wait(100);
+  w.document.getElementById('ltNome').value='libero giovanili';w.document.getElementById('ltTipo').value='libero';
+  const spunta=[...w.document.querySelectorAll('#dlgForm input[name="sq"]')].find(c=>c.value===T);spunta.checked=true;
+  OK().click();await wait(700);
+  ok(set().modelli.includes('LIBERO GIOVANILI')&&set().tipiLotto['LIBERO GIOVANILI']==='libero','il lotto nuovo nasce con il suo tipo');
+  ok(set().tipiLotto.LIBERO==='libero'&&set().tipiLotto.STANDARD==='gara','e i lotti di prima ricevono il tipo scritto');
+  ok(sq().find(x=>x.nome===T).modelloLibero==='LIBERO GIOVANILI',`${T} prende i liberi dal lotto nuovo`);
+  const unaP=Object.entries(store.atlete).find(([,a])=>a.squadra==='PRIMA DIVISIONE')[0];
+  ok(w.eval(`derive().modelloPer({atletaId:'${rL.atletaId}',modello:'LIBERO'})`)==='LIBERO GIOVANILI','una richiesta di libero di quella squadra va al lotto giovanili');
+  ok(w.eval(`derive().modelloPer({atletaId:'${unaP}',modello:'LIBERO'})`)==='LIBERO','la prima squadra resta sul lotto LIBERO');
+  ok(w.eval(`derive().modelloPer({atletaId:'${rL.atletaId}',modello:''})`)===w.eval(`derive().lotto[${JSON.stringify(T)}]`),'la divisa da gara non cambia');
+  ok(w.eval("stessoGenere('LIBERO','LIBERO GIOVANILI')")&&!w.eval("stessoGenere('LIBERO','STANDARD')")&&w.eval("stessoGenere('STANDARD','PRIMA SQUADRA')"),'un libero si cambia con un libero di qualunque lotto, una divisa da gara con una da gara');
+  // il lotto e' vuoto: la richiesta resta senza maglia; con una maglia la prende
+  ok(!w.eval(`derive().prop[${JSON.stringify(ridL)}].divisaId`),'con il lotto vuoto la richiesta non riceve una maglia di un altro lotto');
+  const tg=rL.taglia||'M';
+  store.divise.provaLG={taglia:tg,numero:77,modello:'LIBERO GIOVANILI',holder:null,daRestituire:false};notify();await wait(200);
+  const pp=w.eval(`derive().prop[${JSON.stringify(ridL)}]`);
+  ok(pp.divisaId==='provaLG',`con una maglia nel lotto giovanili la richiesta la riceve (${pp.esito} ${pp.divisaId||''})`);
+  // rinominare: maglie, squadre e tipi seguono il nome nuovo
+  w.location.hash='#magazzino';w.eval('render()');await wait(200);
+  w.document.querySelector('[data-act="modLotto"][data-v="LIBERO GIOVANILI"]').click();await wait(100);
+  w.document.getElementById('ltNome').value='Liberi under';OK().click();await wait(700);
+  ok(store.divise.provaLG.modello==='LIBERI UNDER'&&sq().find(x=>x.nome===T).modelloLibero==='LIBERI UNDER'&&set().tipiLotto['LIBERI UNDER']==='libero'&&!set().modelli.includes('LIBERO GIOVANILI'),'rinominando il lotto si aggiornano maglie, squadre e tipo');
+  // togliendo la squadra dal lotto torna al lotto LIBERO
+  w.document.querySelector('[data-act="modLotto"][data-v="LIBERI UNDER"]').click();await wait(100);
+  [...w.document.querySelectorAll('#dlgForm input[name="sq"]')].find(c=>c.value===T).checked=false;OK().click();await wait(700);
+  ok(sq().find(x=>x.nome===T).modelloLibero==='LIBERO','togliendo la spunta la squadra torna all\'altro lotto da libero');
+  // con una maglia dentro non si elimina; vuoto si'
+  w.document.querySelector('[data-act="modLotto"][data-v="LIBERI UNDER"]').click();await wait(100);
+  ok(!w.document.querySelector('#dlgForm button[value="elimina"]'),'un lotto con maglie non si elimina');
+  w.document.querySelector('#dlgForm button[value="cancel"]').click();await wait(100);
+  delete store.divise.provaLG;notify();await wait(200);
+  w.document.querySelector('[data-act="modLotto"][data-v="LIBERI UNDER"]').click();await wait(100);
+  w.document.querySelector('#dlgForm button[value="elimina"]').click();await wait(700);
+  ok(!set().modelli.includes('LIBERI UNDER')&&!set().tipiLotto['LIBERI UNDER'],'il lotto vuoto si elimina');
+  ok(esiti()===esitiPrima,`dopo le prove le proposte tornano quelle di prima ${esiti()}`);
+  if(ridL==='provaLibero'){delete store.richieste.provaLibero;notify();await wait(200)}
+  w.__rispostaConferme=undefined;}
+
  ok(errs.length===0,'nessun errore JavaScript '+(errs.join('; ')));
  process.exit(fail?1:0)})();
