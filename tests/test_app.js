@@ -245,7 +245,16 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   w.eval(`eliminaAtleta('${aid}')`);await wait(200);
   const caselle=[...w.document.querySelectorAll('#dlgForm input[name="reso"]')];
   ok(caselle.length>=2&&caselle.some(c=>/borraccia/i.test(c.closest('label').textContent)),`l'uscita elenca quello che ha in mano (${caselle.length})`);
-  caselle.find(c=>/borraccia/i.test(c.closest('label').textContent)).checked=false; // la borraccia non l'ha ancora riportata
+  ok(caselle.every(c=>!c.checked),'i capi partono non spuntati: nessun rientro registrato per sbaglio');
+  // Nessuno spuntato: si conferma lo stesso, resta tutto com'e' e l'atleta
+  // resta con l'eliminazione in attesa di riconsegna.
+  const movPrima=Object.keys(store.movimenti).length;
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(500);
+  ok(store.atlete[aid]&&store.atlete[aid].inUscita===true&&store.divise[did].holder===aid&&Object.keys(store.movimenti).length===movPrima,
+    'confermando senza spunte l\'atleta resta, in attesa di riconsegna, e nessun capo rientra');
+  w.eval(`eliminaAtleta('${aid}')`);await wait(200);
+  // rende la divisa, la borraccia non l'ha ancora riportata
+  [...w.document.querySelectorAll('#dlgForm input[name="reso"]')].filter(c=>!/borraccia/i.test(c.closest('label').textContent)).forEach(c=>{c.checked=true});
   w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(700);
   ok(store.atlete[aid]&&store.atlete[aid].inUscita===true&&store.divise[did].holder===null,'resa la divisa, resta segnato in uscita');
   const D1=w.eval('derive()');

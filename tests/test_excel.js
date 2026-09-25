@@ -267,6 +267,8 @@ const carica = async (tipo, righe) => {
   );
   ok(w.eval("modRisposta('non mi manca')") === "?", "\"non mi manca\" non viene letto come \"mi manca\"");
   ok(w.eval("modRisposta('Mi manca')") === "manca" && w.eval("modRisposta('ce l’ho')") === "ha", "le risposte normali restano capite");
+  ok(w.eval("modRisposta('la devo sostiutire')") === "cambia" && w.eval("modRisposta('La devo cambia')") === "cambia",
+    "«da cambiare» scritto male o troncato viene capito lo stesso");
   ok(
     JSON.stringify(w.eval("fogliSquadre(['UNDER 13/14 FEMMINILE SQUADRA B MOLTO LUNGA','UNDER 13/14 FEMMINILE SQUADRA B MOLTO LUNGA 2','Istruzioni'])"))
       === JSON.stringify(["UNDER 13 14 FEMMINILE SQUADRA B", "UNDER 13 14 FEMMINILE SQUAD (2)", "Istruzioni (2)"]),
@@ -325,6 +327,121 @@ const carica = async (tipo, righe) => {
       w.eval(`S.atlete[${JSON.stringify(r.atletaId)}].cognome`) === r3[0]);
     ok(Object.keys(w.eval("S.richieste")).length === prima + 1 && nuova && nuova.taglia === s3.taglia,
       "un modulo vecchio, con la taglia attuale e quella richiesta, viene ancora letto");
+  }
+
+  /* 9b. "ce l'ho" con la taglia: il capo si segna come gia' dell'atleta, senza
+     toccare la giacenza; la divisa col numero nasce a suo nome. */
+  {
+    const info = w.eval(`(()=>{const D=derive();const tit=${JSON.stringify(tit)};const gru=${JSON.stringify(gru)};
+      let mat=null,div=null;
+      for(let i=0;i<tit.length;i++){if(tit[i]!=='Risposta'||tit[i+1]!=='Taglia'||gru[i+1]!==gru[i])continue;const a=articoloDaNome(D,gru[i]);if(!a)continue;
+        if(a.conNumero){if(!div)div={i,taglia:a.taglie[0],nome:a.nome}}else if(!mat)mat={i,taglia:a.taglie[0],nome:a.nome}}
+      // un numero che non porta nessuno in squadra e che nessuna divisa ha, nemmeno in magazzino
+      const occ=D.occ[${JSON.stringify(f0.nome)}]||new Set();const usati=new Set(Object.values(S.divise).map(x=>Number(x.numero)));
+      let n=99;while(occ.has(n)||usati.has(n))n--;
+      return {mat,div,n}})()`);
+    const r = tit.map(() => "");
+    r[0] = "Provetta"; r[1] = "Esempia"; r[2] = String(info.n);
+    r[info.mat.i] = "ce l’ho"; r[info.mat.i + 1] = String(info.mat.taglia);
+    r[info.div.i] = "Ce l'ho"; r[info.div.i + 1] = String(info.div.taglia);
+    modulo.daLeggere = [[f0.nome, [su, giu, r]]];
+    const possessi = () => Object.values(w.eval("S.movimenti")).filter((m) => m.tipo === "POSSESSO").length;
+    const giac = () => w.eval(`(derive().stock[derive().key(${JSON.stringify(info.mat.nome)},${JSON.stringify(info.mat.taglia)})]||{ora:0}).ora`);
+    const p0 = possessi(), g0 = giac();
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    const aid = w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome==='Provetta'&&S.atlete[k].nome==='Esempia')`);
+    const suaDiv = w.eval(`Object.entries(S.divise).find(([,d])=>d.holder===${JSON.stringify(aid)})`);
+    ok(possessi() === p0 + 2, `«ce l'ho» con la taglia registra il materiale e la divisa (${p0} -> ${possessi()})`);
+    ok(giac() === g0, "il materiale già in possesso non cambia la giacenza");
+    ok(w.eval(`(derive().dotazione[${JSON.stringify(aid)}]||{})[derive().key(${JSON.stringify(info.mat.nome)},${JSON.stringify(info.mat.taglia)})]`) === 1,
+      "il materiale già in possesso compare fra le cose dell'atleta");
+    ok(suaDiv && Number(suaDiv[1].numero) === info.n && suaDiv[1].taglia === info.div.taglia,
+      "la divisa con «ce l'ho», taglia e numero risulta dell'atleta");
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok(possessi() === p0 + 2, "ricaricando il modulo il possesso non si registra due volte");
+    const mid = w.eval(`Object.keys(S.movimenti).find(k=>S.movimenti[k].tipo==='POSSESSO'&&S.movimenti[k].divisaId===${JSON.stringify(suaDiv && suaDiv[0])})`);
+    await w.eval(`annullaMovimento(${JSON.stringify(mid)})`);
+    await attendi(300);
+    ok(!w.eval(`S.divise[${JSON.stringify(suaDiv && suaDiv[0])}]`), "annullando, la divisa creata dal modulo sparisce");
+
+    // Senza taglia: se in magazzino c'e' una sola divisa con quel numero, e' la sua.
+    const lotto = w.eval(`derive().lotto[${JSON.stringify(f0.nome)}]||'STANDARD'`);
+    const aggiungi = (tg) => w.eval(`S.db.collection('divise').add({taglia:${JSON.stringify(tg)},numero:${info.n},modello:${JSON.stringify(lotto)},holder:null,daRestituire:false,note:''}).then(r=>r.id)`);
+    const idUna = await aggiungi(info.div.taglia);
+    await attendi(300);
+    const rSenza = tit.map(() => "");
+    rSenza[0] = "Provetta"; rSenza[1] = "Esempia"; rSenza[2] = String(info.n); rSenza[info.div.i] = "ce l'ho";
+    modulo.daLeggere = [[f0.nome, [su, giu, rSenza]]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok(w.eval(`S.divise[${JSON.stringify(idUna)}].holder`) === aid,
+      "«ce l'ho» col numero e senza taglia: l'unica divisa in magazzino con quel numero passa all'atleta");
+    // Due in magazzino con lo stesso numero: non si indovina, si avvisa.
+    const mid2 = w.eval(`Object.keys(S.movimenti).find(k=>S.movimenti[k].divisaId===${JSON.stringify(idUna)})`);
+    await w.eval(`annullaMovimento(${JSON.stringify(mid2)})`);
+    await attendi(300);
+    const altraTg = w.eval(`articoloDaNome(derive(),${JSON.stringify(gru[info.div.i])}).taglie.find(t=>t!==${JSON.stringify(info.div.taglia)})`);
+    await aggiungi(altraTg);
+    await attendi(300);
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    const avv = (w.eval("S.app.esitoExcel") || {}).avvisi || [];
+    ok(!w.eval(`S.divise[${JSON.stringify(idUna)}].holder`) && avv.some((a) => /ce ne sono 2/.test(a)),
+      "con due divise dello stesso numero in magazzino non ne sceglie una: chiede la taglia");
+    // Stesso numero in magazzino ma in un'altra taglia: e' normale, la divisa
+    // nasce, con un avviso nel caso fosse la stessa maglia.
+    const t3 = w.eval(`articoloDaNome(derive(),${JSON.stringify(gru[info.div.i])}).taglie.find(t=>t!==${JSON.stringify(info.div.taglia)}&&t!==${JSON.stringify(altraTg)})`);
+    const divPrima3 = Object.keys(w.eval("S.divise")).length;
+    const r3b = [...rSenza]; r3b[info.div.i + 1] = String(t3);
+    modulo.daLeggere = [[f0.nome, [su, giu, r3b]]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    const avv3 = (w.eval("S.app.esitoExcel") || {}).avvisi || [];
+    ok(Object.keys(w.eval("S.divise")).length === divPrima3 + 1 && avv3.some((a) => /correggerne la taglia/.test(a)),
+      "stesso numero in magazzino in un'altra taglia: la divisa nasce, con un avviso");
+
+  /* 9b-bis. "da cambiare" su una divisa consegnata quest'anno: la richiesta nasce */
+  {
+    const libera = w.eval(`(()=>{const D=derive();const l=D.lotto[${JSON.stringify(f0.nome)}]||'STANDARD';const occ=D.occ[${JSON.stringify(f0.nome)}]||new Set();
+      return Object.keys(S.divise).find(id=>{const d=S.divise[id];return !d.holder&&!d.dismessa&&(d.modello||'STANDARD')===l&&!occ.has(Number(d.numero))})})()`);
+    const dv = w.eval(`S.divise[${JSON.stringify(libera)}]`);
+    await w.eval(`(async()=>{await S.db.doc('divise/'+${JSON.stringify(libera)}).update({holder:${JSON.stringify(aid)}});
+      await mov({tipo:'CONSEGNA',atletaId:${JSON.stringify(aid)},articolo:'DIVISA GARA',taglia:${JSON.stringify(dv.taglia)},divisaId:${JSON.stringify(libera)},numero:${dv.numero},prevHolder:null,prevDR:false})})()`);
+    await attendi(300);
+    const rc = tit.map(() => "");
+    rc[0] = "Provetta"; rc[1] = "Esempia"; rc[2] = String(dv.numero); rc[info.div.i] = "La devo cambiare"; rc[info.div.i + 1] = String(w.eval(`articoloDaNome(derive(),${JSON.stringify(gru[info.div.i])}).taglie.find(t=>t!==${JSON.stringify(dv.taglia)})`));
+    modulo.daLeggere = [[f0.nome, [su, giu, rc]]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok(w.eval(`Object.values(S.richieste).some(r=>r.atletaId===${JSON.stringify(aid)}&&r.articolo==='DIVISA GARA')`)
+      && w.eval(`S.divise[${JSON.stringify(libera)}].daRestituire`) === true,
+      "«da cambiare» su una divisa consegnata in questa stagione crea la richiesta e segna la vecchia da restituire");
+  }
+  }
+
+  /* 9c. divisa rovinata e materiale buttato via */
+  {
+    const prop = w.eval("Object.keys(derive().prenDivisa).find(id=>!S.divise[id].holder)");
+    await w.eval(`S.db.doc('divise/'+${JSON.stringify(prop)}).update({fuoriUso:true})`);
+    await attendi(300);
+    ok(prop && !w.eval(`derive().prenDivisa[${JSON.stringify(prop)}]`) && w.eval(`!!S.divise[${JSON.stringify(prop)}]`),
+      "una divisa rovinata resta in archivio ma non viene più proposta");
+    await w.eval(`S.db.doc('divise/'+${JSON.stringify(prop)}).update({fuoriUso:false})`);
+    await attendi(300);
+    ok(w.eval(`!!derive().prenDivisa[${JSON.stringify(prop)}]`), "rimessa fra le assegnabili torna a essere proposta");
+
+    const k = w.eval("Object.keys(derive().stock).find(k=>derive().stock[k].ora>=2)");
+    const [art, tg] = k.split("|");
+    const prima = w.eval(`derive().stock[${JSON.stringify(k)}].ora`);
+    await w.eval(`mov({tipo:'SCARTO',articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:2,note:'prova'})`);
+    await attendi(300);
+    ok(w.eval(`derive().stock[${JSON.stringify(k)}].ora`) === prima - 2, "il materiale buttato via cala dalla giacenza");
+    const sid = w.eval("Object.keys(S.movimenti).find(k=>S.movimenti[k].tipo==='SCARTO')");
+    await w.eval(`annullaMovimento(${JSON.stringify(sid)})`);
+    await attendi(300);
+    ok(w.eval(`derive().stock[${JSON.stringify(k)}].ora`) === prima, "annullando, i pezzi buttati tornano in magazzino");
   }
 
   /* 10. i quattro fogli: scaricati dal programma e ricaricati tali e quali */
