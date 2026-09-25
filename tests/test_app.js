@@ -267,6 +267,15 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   ok(suoi.length>=3,'i suoi movimenti restano nel registro con il nome scritto sopra');
   ok(!store.richieste.PROVA_USCITA,'e le sue richieste aperte spariscono');}
 
+ // --- staff ed esterni: solo nome e ruolo, niente atlete ---
+ {w.eval('dlgMovimento()');await wait(100);
+  ok(!w.document.querySelector('#mChi'),'«Staff ed esterni» non offre le atlete: per loro ci sono scheda e Assegnazioni');
+  const n0=Object.keys(store.movimenti).length;
+  w.document.querySelector('#mFuori').value='Provetta, allenatrice';
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(400);
+  const m=Object.values(store.movimenti).find(x=>x.a==='Provetta, allenatrice');
+  ok(Object.keys(store.movimenti).length===n0+1&&m&&m.atletaId===null,'il movimento verso lo staff si registra con il nome scritto');}
+
  // --- carico: arrivo, ordinati che calano, correzione della giacenza ---
  {const D0=w.eval('derive()');
   const [k]=Object.entries(D0.stock).find(([kk,s])=>!D0.conNumero(kk.split('|')[0])&&s.ora>5);
@@ -281,12 +290,20 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   w.document.querySelector('#dlgForm button[value="rett"]').click();await wait(600);
   D1=w.eval('derive()');
   ok(D1.stock[k].ora===2&&D1.stock[k].ordinati===7,'Correggi giacenza: la giacenza diventa quella contata, gli ordinati non cambiano');
-  // Invio nella casella preme il pulsante principale, non "Correggi giacenza"
+  // «Salva ordinati»: solo i pezzi in arrivo, la giacenza non cambia
+  w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`);await wait(100);
+  // anche con una quantita' scritta, «Salva ordinati» tocca solo gli ordinati
+  w.document.querySelector('#mQ').value='3';w.document.querySelector('#mOrd').value='5';
+  w.document.querySelector('#dlgForm button[value="ord"]').click();await wait(600);
+  D1=w.eval('derive()');
+  ok(D1.stock[k].ora===2&&D1.stock[k].ordinati===5,`Salva ordinati: 5 in arrivo, la giacenza resta ${D1.stock[k].ora}`);
+  // Invio nella finestra del materiale non sceglie fra arrivo, inventario e dismissione
   w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`);await wait(100);
   const q=w.document.querySelector('#mQ');q.value='1';
   q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await wait(600);
   D1=w.eval('derive()');
-  ok(D1.stock[k].ora===3,'Invio nella finestra del carico registra l\'arrivo, non la correzione');}
+  ok(D1.stock[k].ora===2&&w.document.querySelector('#dlg').open,'Invio nella finestra del materiale non registra niente: si sceglie il pulsante');
+  w.eval('closeDlg()');}
 
  // --- come nel programma installato: la conferma e' asincrona e la risposta e' no ---
  {const rid=Object.keys(store.richieste)[0];

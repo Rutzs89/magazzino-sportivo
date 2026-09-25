@@ -97,6 +97,7 @@ const invoke = async (nome, arg) => {
     case "scrivi_excel": fogliScritti[arg.foglio] = arg; return null;
     case "leggi_excel": return daLeggere;
     case "leggi_excel_fogli": return modulo.daLeggere;
+    case "copia_prima_di_importare": (disco.copie = disco.copie || []).push(arg.contenuto); return null;
     default: throw new Error("comando sconosciuto: " + nome);
   }
 };
@@ -139,6 +140,11 @@ const carica = async (tipo, righe) => {
     Object.keys(w.eval("S.atlete")).length === 0,
     "si parte da un programma vuoto",
   );
+
+  /* 0. programma vuoto: la pagina iniziale dice da dove partire */
+  w.eval("location.hash='#home';render()");
+  ok(/Per cominciare/.test(w.document.querySelector("#view").textContent) && w.document.querySelectorAll(".inizio li").length === 3,
+    "a programma vuoto la pagina iniziale mostra i tre passi per cominciare");
 
   /* 1. articoli e magazzino */
   const a1 = await carica("articoli", righeArticoli);
@@ -278,8 +284,8 @@ const carica = async (tipo, righe) => {
   /* 9. il modulo di distribuzione: si scarica, si compila, si ricarica */
   await w.eval("scaricaModulo()");
   await attendi(300);
-  ok(modulo.scritto && modulo.scritto.fogli.length === w.eval("derive().perServire.length"),
-    "il modulo esce con un foglio per squadra");
+  ok(modulo.scritto && modulo.scritto.fogli.filter((f) => !f.nascosto).length === w.eval("derive().perServire.length") && modulo.scritto.fogli.some((f) => f.nascosto && f.nome === "Origine"),
+    "il modulo esce con un foglio per squadra, piu' la fotografia nascosta");
   const f0 = modulo.scritto.fogli[0];
   const tit = f0.intestazioni, gru = f0.gruppi;
   ok(gru.length === tit.length && tit.filter((t) => t === "Risposta").length === w.eval("modArticoli(derive()).length"),
@@ -492,6 +498,214 @@ const carica = async (tipo, righe) => {
     }
   }
 
+  /* 9e. «consegnato»: lo stesso foglio torna dalla palestra e registra le consegne */
+  {
+    await w.eval("scaricaModulo()");
+    await attendi(300);
+    const fogli = modulo.scritto.fogli;
+    const testa = (f) => [f.intestazioni.map((t, k) => (!f.gruppi[k] ? t : k > 0 && f.gruppi[k - 1] === f.gruppi[k] ? "" : f.gruppi[k])),
+      f.intestazioni.map((t, k) => (f.gruppi[k] ? t : ""))];
+    const conNum = (f, k) => w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(f.gruppi[k])}).nome)`);
+    const idDi = (r) => w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(r[0])}&&S.atlete[k].nome===${JSON.stringify(r[1])})`);
+    ok(fogli[0].intestazioni.includes("Proposta"), "la divisa ha la colonna Proposta");
+
+    // materiale pronto: «mi manca» -> «consegnato»
+    let scelta = null;
+    for (const f of fogli) for (const [ri, r] of f.righe.entries()) for (const [k, c] of r.entries()) {
+      if (scelta || f.intestazioni[k] !== "Risposta" || c !== "mi manca" || conNum(f, k)) continue;
+      const aid = idDi(r); const art = w.eval(`articoloDaNome(derive(),${JSON.stringify(f.gruppi[k])}).nome`);
+      const rid = w.eval(`Object.keys(S.richieste).find(x=>S.richieste[x].atletaId===${JSON.stringify(aid)}&&S.richieste[x].articolo===${JSON.stringify(art)})`);
+      if (rid && w.eval(`derive().prop[${JSON.stringify(rid)}].esito`) === "OK") scelta = { f, ri, k, aid, art, rid };
+    }
+    const { f, ri, k, aid, art, rid } = scelta;
+    const tgM = w.eval(`S.richieste[${JSON.stringify(rid)}].taglia`);
+    const giac = () => w.eval(`derive().stock[derive().key(${JSON.stringify(art)},${JSON.stringify(tgM)})].ora`);
+    const g0 = giac();
+    const riga = [...f.righe[ri]]; riga[k] = "consegnato";
+    // divisa della stessa squadra: una riga con «mi manca» e una proposta
+    const kd = f.intestazioni.findIndex((t, j) => t === "Risposta" && conNum(f, j));
+    const rdi = f.righe.findIndex((r, j) => j !== ri && r[kd] === "mi manca" && /n\.\d+/.test(r[kd + 2] || ""));
+    const righe = [riga];
+    let aidD = null, prop = null;
+    if (rdi >= 0) { const rd = [...f.righe[rdi]]; rd[kd] = "consegnato"; righe.push(rd); aidD = idDi(rd); prop = rd[kd + 2]; }
+    modulo.daLeggere = [[f.nome, [...testa(f), ...righe]]];
+    await w.eval("caricaModulo()");
+    await attendi(1200);
+    ok(!w.eval(`S.richieste[${JSON.stringify(rid)}]`) && giac() === g0 - 1,
+      `«consegnato» sul materiale registra la consegna: richiesta chiusa, giacenza ${g0} -> ${giac()}`);
+    if (aidD) {
+      const [tgD, nD] = prop.split(" n.");
+      ok(w.eval(`Object.values(S.divise).some(d=>d.holder===${JSON.stringify(aidD)}&&d.taglia===${JSON.stringify(tgD)}&&Number(d.numero)===${Number(nD)})`),
+        `«consegnato» sulla divisa consegna quella della colonna Proposta (${prop})`);
+    }
+    const mov1 = Object.keys(w.eval("S.movimenti")).length;
+    await w.eval("caricaModulo()");
+    await attendi(1200);
+    ok(Object.keys(w.eval("S.movimenti")).length === mov1, "ricaricando lo stesso foglio le consegne non si registrano due volte");
+  }
+
+  /* 9f. rete di sicurezza: copia prima di caricare, e il caricamento si annulla tutto */
+  {
+    await w.eval("scaricaModulo()");
+    await attendi(300);
+    const f = modulo.scritto.fogli[0];
+    const testa = [f.intestazioni.map((t, k) => (!f.gruppi[k] ? t : k > 0 && f.gruppi[k - 1] === f.gruppi[k] ? "" : f.gruppi[k])),
+      f.intestazioni.map((t, k) => (f.gruppi[k] ? t : ""))];
+    const nuova = f.intestazioni.map(() => ""); nuova[0] = "Esempia"; nuova[1] = "Provetta";
+    const kt = f.intestazioni.findIndex((t, j) => t === "Risposta" && !w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(f.gruppi[j])}).nome)`) && f.intestazioni[j + 1] === "Taglia");
+    nuova[kt] = "mi manca"; nuova[kt + 1] = w.eval(`articoloDaNome(derive(),${JSON.stringify(f.gruppi[kt])}).taglie[0]`);
+    const conta = () => JSON.stringify([Object.keys(w.eval("S.atlete")).length, Object.keys(w.eval("S.richieste")).length, Object.keys(w.eval("S.movimenti")).length]);
+    const prima = conta(); const copie0 = (disco.copie || []).length;
+    modulo.daLeggere = [[f.nome, [...testa, nuova]]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok((disco.copie || []).length === copie0 + 1 && conta() !== prima, "prima di scrivere il caricamento salva una copia dei dati di quel momento");
+    ok(!!w.eval("S.app.esitoExcel.annullabile"), "la finestra dell'esito offre «Annulla questo caricamento»");
+    await w.eval("annullaCaricamento()");
+    await attendi(600);
+    ok(conta() === prima, `annullando il caricamento i dati tornano a com'erano (${prima} -> ${conta()})`);
+  }
+
+  /* 9h. il foglio a prova di errore: fotografia dello scarico e casi storti */
+  {
+    await w.eval("scaricaModulo()");
+    await attendi(300);
+    const fogli = modulo.scritto.fogli.filter((f) => !f.nascosto);
+    const orig = modulo.scritto.fogli.find((f) => f.nascosto);
+    const testa = (f) => [f.intestazioni.map((t, k) => (!f.gruppi[k] ? t : k > 0 && f.gruppi[k - 1] === f.gruppi[k] ? "" : f.gruppi[k])),
+      f.intestazioni.map((t, k) => (f.gruppi[k] ? t : ""))];
+    const conNum = (f, k) => w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(f.gruppi[k])}).nome)`);
+    const idDi = (r) => w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(r[0])}&&S.atlete[k].nome===${JSON.stringify(r[1])})`);
+    const file = (fs2) => [...fs2.map((f) => [f.nome, [...testa(f), ...f.righe]]), [orig.nome, orig.righe]];
+    const richieste = () => Object.keys(w.eval("S.richieste")).length;
+
+    // un «mi manca» di materiale, consegnato dal programma dopo lo scarico
+    let pos = null;
+    for (const f of fogli) for (const [ri, r] of f.righe.entries()) for (const [k, c] of r.entries())
+      if (!pos && f.intestazioni[k] === "Risposta" && c === "mi manca" && !conNum(f, k)) pos = { f, ri, k };
+    const aidM = idDi(pos.f.righe[pos.ri]);
+    const artM = w.eval(`articoloDaNome(derive(),${JSON.stringify(pos.f.gruppi[pos.k])}).nome`);
+    const ridM = w.eval(`Object.keys(S.richieste).find(x=>S.richieste[x].atletaId===${JSON.stringify(aidM)}&&S.richieste[x].articolo===${JSON.stringify(artM)})`);
+    await w.eval(`doConsegna(${JSON.stringify(ridM)},{},shadow(),[])`);
+    await attendi(300);
+    const r0 = richieste();
+    modulo.daLeggere = file(fogli);
+    await w.eval("caricaModulo()");
+    await attendi(1500);
+    ok(richieste() === r0 && !w.eval(`Object.values(S.richieste).some(r=>r.atletaId===${JSON.stringify(aidM)}&&r.articolo===${JSON.stringify(artM)})`),
+      "un foglio vecchio ricaricato non rifa' la richiesta consegnata nel frattempo");
+
+    // casella svuotata: ignorata
+    const f1 = fogli.find((f) => f.righe.some((r) => r.some((c, k) => f.intestazioni[k] === "Risposta" && c === "mi manca")));
+    const i1 = f1.righe.findIndex((r) => r.some((c, k) => f1.intestazioni[k] === "Risposta" && c === "mi manca"));
+    const k1 = f1.righe[i1].findIndex((c, k) => f1.intestazioni[k] === "Risposta" && c === "mi manca");
+    const riga1 = [...f1.righe[i1]]; riga1[k1] = "";
+    const pr1 = richieste(), mv1 = Object.keys(w.eval("S.movimenti")).length;
+    modulo.daLeggere = [[f1.nome, [...testa(f1), riga1]], [orig.nome, orig.righe]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok(richieste() === pr1 && Object.keys(w.eval("S.movimenti")).length === mv1, "una casella svuotata non registra niente e non toglie niente");
+
+    // foglio rinominato: si riconosce la squadra dai nomi
+    const at1 = Object.keys(w.eval("S.atlete")).length;
+    modulo.daLeggere = [[f1.nome + " rinominato", [...testa(f1), ...f1.righe]]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok(Object.keys(w.eval("S.atlete")).length === at1, "un foglio rinominato viene letto come la sua squadra, senza atlete doppie");
+
+    // passaggio di squadra: la riga va nel foglio dell'altra squadra e sparisce dal suo
+    const [fa, fb] = fogli.filter((f) => f.righe.length > 2);
+    const chi = fa.righe[0];
+    const aidS = idDi(chi);
+    const nuovaRiga = fb.intestazioni.map(() => ""); nuovaRiga[0] = chi[0]; nuovaRiga[1] = chi[1];
+    const kb = fb.intestazioni.findIndex((t, j) => t === "Risposta" && !conNum(fb, j));
+    nuovaRiga[kb] = "mi manca"; nuovaRiga[kb + 1] = w.eval(`articoloDaNome(derive(),${JSON.stringify(fb.gruppi[kb])}).taglie[0]`);
+    const sqB = w.eval(`S.atlete[${JSON.stringify(idDi(fb.righe[0]))}].squadra`);
+    modulo.daLeggere = [[fa.nome, [...testa(fa), ...fa.righe.slice(1)]], [fb.nome, [...testa(fb), ...fb.righe, nuovaRiga]]];
+    await w.eval("caricaModulo()");
+    await attendi(1200);
+    ok(w.eval(`S.atlete[${JSON.stringify(aidS)}].squadra`) === sqB && Object.keys(w.eval("S.atlete")).length === at1,
+      "un'atleta scritta nel foglio di un'altra squadra e tolta dal suo cambia squadra, senza scheda doppia");
+
+    // due righe diverse per la stessa atleta: nessuna delle due
+    const rA = [...fb.righe[1]], rB = [...fb.righe[1]];
+    const kd = rB.findIndex((c, k) => fb.intestazioni[k] === "Risposta" && !conNum(fb, k));
+    rB[kd] = rA[kd] === "mi manca" ? "ce l’ho" : "mi manca"; if (rB[kd] === "mi manca") rB[kd + 1] = w.eval(`articoloDaNome(derive(),${JSON.stringify(fb.gruppi[kd])}).taglie[0]`);
+    modulo.daLeggere = [[fb.nome, [...testa(fb), rA, rB]]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok((w.eval("S.app.problemiExcel") || []).some((p) => /compare più volte/.test(p)), "due righe diverse per la stessa atleta: errore, non vale la prima");
+  }
+
+  /* 9i. materiale «da cambiare» poi «consegnato»: rientra il pezzo vecchio */
+  {
+    const idDi = (r) => w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(r[0])}&&S.atlete[k].nome===${JSON.stringify(r[1])})`);
+    // un'atleta che ha gia' un materiale con taglie: gliene si chiede il cambio
+    const [aid, art, tg] = w.eval(`(()=>{const D=derive();for(const [id,dd] of Object.entries(D.dotazione)){const a=S.atlete[id];if(!a||!puoRicevere(a))continue;
+      for(const [k,v] of Object.entries(dd)){const [ar,t]=k.split('|');const x=articoloDaNome(D,artLabel(ar));if(v>0&&x&&modConTaglie(x)&&modArticoli(D).some(y=>y.nome===ar)&&!Object.values(S.richieste).some(r=>r.atletaId===id&&r.articolo===ar))return [id,ar,t]}}return []})()`);
+    if (aid) {
+      const altra = w.eval(`articoloDaNome(derive(),artLabel(${JSON.stringify(art)})).taglie.find(t=>t!==${JSON.stringify(tg)}&&(derive().stock[derive().key(${JSON.stringify(art)},t)]||{ora:0}).ora>0)`);
+      await w.eval(`S.db.collection('richieste').add({atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(altra)},modello:'',numeroDesiderato:null,note:'',ordine:Date.now()})`);
+      await attendi(300);
+      await w.eval("scaricaModulo()");
+      await attendi(300);
+      const sq = w.eval(`S.atlete[${JSON.stringify(aid)}].squadra`);
+      const f = modulo.scritto.fogli.find((x) => !x.nascosto && x.righe.some((r) => idDi(r) === aid));
+      const orig = modulo.scritto.fogli.find((x) => x.nascosto);
+      const et = w.eval(`artLabel(${JSON.stringify(art)})`);
+      const k = f.intestazioni.findIndex((t, j) => t === "Risposta" && f.gruppi[j] === et);
+      const riga = [...f.righe.find((r) => idDi(r) === aid)];
+      ok(riga[k] === "da cambiare", `il modulo esce con «da cambiare» per chi ha il capo e una richiesta (${riga[k]})`);
+      riga[k] = "consegnato";
+      const testa = [f.intestazioni.map((t, j) => (!f.gruppi[j] ? t : j > 0 && f.gruppi[j - 1] === f.gruppi[j] ? "" : f.gruppi[j])), f.intestazioni.map((t, j) => (f.gruppi[j] ? t : ""))];
+      modulo.daLeggere = [[f.nome, [...testa, riga]], [orig.nome, orig.righe]];
+      await w.eval("caricaModulo()");
+      await attendi(1200);
+      const dot = w.eval(`derive().dotazione[${JSON.stringify(aid)}]`) || {};
+      ok((dot[`${art}|${altra}`] || 0) >= 1 && (dot[`${art}|${tg}`] || 0) === 0,
+        `con «consegnato» su un capo da cambiare rientra quello vecchio (${tg} -> ${altra}), sq ${sq ? "ok" : ""}`);
+    }
+  }
+
+  /* 9l. la stagione: chiusura con gli articoli e le richieste, e si annulla */
+  {
+    const st0 = w.eval("S.settings.stagione");
+    // due articoli segnati "di questa stagione", cosi' si vede che seguono la chiusura
+    await w.eval(`S.db.doc('settings/main').update({articoli:S.settings.articoli.map((a,i)=>i<2?{...a,stagione:${JSON.stringify(st0)}}:a)})`); await attendi(200);
+    const artDi = (st) => w.eval(`S.settings.articoli.filter(a=>a.stagione===${JSON.stringify(st)}).length`);
+    const nArt0 = artDi(st0), ric0 = Object.keys(w.eval("S.richieste")).length, mod0 = w.eval("modArticoli(derive()).length");
+    const nuova = w.eval(`stagioneDopo(${JSON.stringify(st0)})`);
+    ok(/^\d{4}\/\d{2}$/.test(nuova), `la stagione dopo la ${st0} è proposta da sola (${nuova})`);
+    w.eval("dlgChiudiStagione()"); await attendi(100);
+    w.document.querySelector('#dlgForm button[value="ok"]').click(); await attendi(900);
+    ok(w.eval("S.settings.stagione") === nuova && artDi(nuova) === nArt0 && Object.keys(w.eval("S.richieste")).length === ric0 && w.eval("modArticoli(derive()).length") === mod0,
+      `chiudendo la stagione gli articoli restano nel modulo e le richieste restano aperte (${nArt0} articoli, ${ric0} richieste)`);
+    ok(!!w.eval("S.app.esitoExcel&&S.app.esitoExcel.annullabile"), "la chiusura della stagione si può annullare");
+    await w.eval("annullaCaricamento()"); await attendi(600);
+    ok(w.eval("S.settings.stagione") === st0 && artDi(st0) === nArt0, "annullando, si torna alla stagione di prima");
+    // correggere il nome non fa sparire gli articoli dal modulo
+    w.document.body.insertAdjacentHTML("beforeend", '<input id="stag" value="2099/00">');
+    w.eval("document.querySelector('#stag').value='" + st0 + " '"); // uguale a meno degli spazi: niente
+    const corretto = st0.replace(/\d{2}$/, (x) => x);
+    w.document.querySelector("#stag").value = corretto + "x";
+    await w.eval("(async()=>{const el=document.createElement('button');el.dataset.act='saveStag';document.body.appendChild(el);el.click()})()"); await attendi(400);
+    ok(w.eval("modArticoli(derive()).length") === mod0, "correggendo il nome della stagione gli articoli restano nel modulo");
+    w.document.querySelector("#stag").value = st0;
+    await w.eval("(async()=>{const el=document.querySelector('[data-act=saveStag]');el.click()})()"); await attendi(400);
+    w.document.querySelectorAll("#stag,[data-act=saveStag]").forEach((x) => x.remove());
+  }
+
+  /* 9g. divisa dismessa: si annulla da Movimenti */
+  {
+    const id = w.eval("Object.keys(S.divise).find(k=>!S.divise[k].holder&&!S.divise[k].dismessa)");
+    w.eval(`dlgDivisa(${JSON.stringify(id)})`); await attendi(100);
+    w.document.querySelector('#dlgForm button[value="dismetti"]').click(); await attendi(400);
+    const mid = w.eval(`Object.keys(S.movimenti).find(k=>S.movimenti[k].tipo==='SCARTO'&&S.movimenti[k].divisaId===${JSON.stringify(id)})`);
+    ok(w.eval(`S.divise[${JSON.stringify(id)}].dismessa`) === true && !!mid, "dismettere una divisa lascia un movimento «Dismesso»");
+    await w.eval(`annullaMovimento(${JSON.stringify(mid)})`); await attendi(300);
+    ok(w.eval(`S.divise[${JSON.stringify(id)}].dismessa`) === false, "annullando, la divisa dismessa torna in magazzino");
+  }
+
   /* 10. i quattro fogli: scaricati dal programma e ricaricati tali e quali */
   const conta = () => ({
     articoli: w.eval("S.settings.articoli.length"),
@@ -631,9 +845,9 @@ const carica = async (tipo, righe) => {
     const arts = w.eval("modArticoli(derive()).map(a=>({et:artLabel(a.nome),taglie:modConTaglie(a)?a.taglie.filter(Boolean):null,nome:a.nome}))");
     const risposteOk = arts.every((a) => {
       const m = menuArt(f0m, a.et, "Risposta");
-      return m && m.valori.length === 3 && m.valori.every((v) => w.eval(`modRisposta(${JSON.stringify(v)})`) !== "?");
+      return m && m.valori.length === w.eval("MOD_RISPOSTE.length") && m.valori.includes("consegnato") && m.valori.every((v) => w.eval(`modRisposta(${JSON.stringify(v)})`) !== "?");
     });
-    ok(risposteOk, `modulo: ogni articolo ha il menu delle tre risposte, tutte riconosciute al caricamento (${arts.length} articoli)`);
+    ok(risposteOk, `modulo: ogni articolo ha il menu delle risposte (con «consegnato»), tutte riconosciute al caricamento (${arts.length} articoli)`);
     const taglieOk = arts.filter((a) => a.taglie).every((a) => {
       const m1 = menuArt(f0m, a.et, "Taglia");
       return m1 && JSON.stringify(m1.valori) === JSON.stringify(a.taglie) &&

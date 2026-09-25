@@ -301,8 +301,13 @@ const ok = (c, m) => {
   await attendi(50);
   const salvato = await w.__APP.finisciDiScrivere();
   ok(salvato === false, "se il salvataggio fallisce, la chiusura lo sa e puo' avvisare");
+  ok(w.document.querySelector("#nonSalvato").hidden === false && /non salvati/i.test(w.document.querySelector("#nonSalvato").textContent),
+    "se il salvataggio fallisce resta in alto una striscia fissa, non un messaggio che sparisce");
   salvataggioRotto = false;
   ok((await w.__APP.finisciDiScrivere()) === true, "e appena il disco torna disponibile i dati vengono scritti");
+  await attendi(50);
+  ok(w.__APP.erroreSalvataggio() === null && w.document.querySelector("#nonSalvato").hidden === true,
+    "salvati i dati, la striscia sparisce");
 
   /* 8. aggiornamento: scarica, salva, installa; e se non salva non installa */
   w.eval("S.db.doc('atlete/" + unaAtleta + "').update({note:'prima di aggiornare'})");

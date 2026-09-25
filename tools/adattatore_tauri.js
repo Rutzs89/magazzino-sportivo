@@ -33,6 +33,7 @@
   var sporco = false; // c'e' roba cambiata che non e' ancora finita sul disco
   var catena = Promise.resolve(); // le scritture si mettono in fila, una per volta
   var ultimoAvviso = null; // "la copia del giorno non e' riuscita", da far vedere fisso
+  var errore = null; // il salvataggio sul disco non riuscito, fisso in alto finche' non riesce
 
   function config() {
     if (!store.__config) store.__config = {};
@@ -74,6 +75,11 @@
       // I dati sono salvati comunque: se e' fallita solo la copia del giorno
       // bisogna dirlo, altrimenti si crede di avere copie che non ci sono.
       ultimoAvviso = avviso || null;
+      if (errore) {
+        errore = null;
+        if (window.render) window.render();
+        if (window.toast) window.toast("Dati di nuovo salvati sul computer");
+      }
       if (avviso) {
         if (window.toast) window.toast("Dati salvati; " + avviso);
         else console.error(avviso);
@@ -82,8 +88,12 @@
       // Non e' andata: i dati restano da scrivere, cosi' il prossimo giro
       // riprova invece di darli per salvati.
       sporco = true;
-      if (window.toast) window.toast("Salvataggio non riuscito: " + e);
+      // Fisso in alto finche' non riesce, e un nuovo tentativo fra poco: prima
+      // si riprovava solo alla modifica successiva.
+      errore = String(e && e.message ? e.message : e);
+      if (window.render) window.render();
       else console.error(e);
+      setTimeout(salvaOra, 5000);
     }
   }
 
@@ -225,9 +235,11 @@
    * Prima si controlla che sia davvero un archivio, poi si mette via quello di
    * adesso nella cartella delle copie, con data e ora. Se quella copia non
    * riesce ci si ferma: senza rete di sicurezza non si sostituisce niente. */
-  async function sostituisciArchivio(testo) {
+  async function sostituisciArchivio(testo, fidato) {
     var dati = JSON.parse(testo);
-    controllaArchivio(dati); // se non va, si ferma qui e non tocca niente
+    // Una fotografia fatta dal programma stesso prima di un caricamento puo'
+    // essere quasi vuota (societa' appena creata): e' nostra, non si controlla.
+    if (!fidato) controllaArchivio(dati); // se non va, si ferma qui e non tocca niente
     await invoke("copia_prima_di_importare", {
       contenuto: JSON.stringify(senzaPreferenze(), null, 1),
       cartellaCopie: config().cartellaCopie || null,
@@ -247,6 +259,10 @@
     /** L'ultimo avviso sulla copia del giorno, da mostrare fisso e non a lampo. */
     avvisoCopie: function () {
       return ultimoAvviso;
+    },
+    /** Il salvataggio sul disco non riuscito, finche' non riesce. */
+    erroreSalvataggio: function () {
+      return errore;
     },
     percorso: function () {
       return invoke("percorso_dati");
@@ -287,6 +303,22 @@
       if (!scelto || typeof scelto !== "string") return null;
       await sostituisciArchivio(await invoke("leggi_file", { percorso: scelto }));
       return scelto;
+    },
+
+    /** Prima di un caricamento in blocco: copia con data e ora nella cartella
+        delle copie (se non riesce, il caricamento non parte) e il testo di
+        quei dati, per poter tornare indietro con un clic. */
+    primaDelCaricamento: async function () {
+      var testo = JSON.stringify(senzaPreferenze(), null, 1);
+      await invoke("copia_prima_di_importare", {
+        contenuto: testo,
+        cartellaCopie: config().cartellaCopie || null,
+      });
+      return testo;
+    },
+    /** Torna ai dati di prima del caricamento (con la solita copia prima). */
+    tornaAllaCopia: function (testo) {
+      return sostituisciArchivio(testo, true);
     },
 
     /** Lo stesso, da una delle copie automatiche, scelta per nome. Sul Mac la
@@ -389,6 +421,11 @@
             righe: tabellaDiTesto(f.righe),
             menu: (f.menu || []).map(menuDiTesto),
             gruppi: (f.gruppi || []).map(testo),
+            // la fotografia dello scarico, e le colonne da non mostrare
+            nascosto: !!f.nascosto,
+            colonneNascoste: (f.colonneNascoste || []).map(function (n) {
+              return Number(n) | 0;
+            }),
           };
         }),
         istruzioni: (istruzioni || []).map(testo),

@@ -400,6 +400,13 @@ pub struct FoglioDati {
     /// Il gruppo di ogni colonna, per l'intestazione su due righe; vuoto = nessuno.
     #[serde(default)]
     pub gruppi: Vec<String>,
+    /// Un foglio che non si vede: la fotografia del modulo com'era allo scarico.
+    #[serde(default)]
+    pub nascosto: bool,
+    /// Colonne da nascondere (0 = la prima): gli articoli che in quella squadra
+    /// non servono. Restano nel file e si rileggono, ma non ingombrano la stampa.
+    #[serde(default, rename = "colonneNascoste")]
+    pub colonne_nascoste: Vec<u16>,
 }
 
 /// Scrive un modello a piu' fogli: uno per squadra, piu' le istruzioni.
@@ -416,16 +423,38 @@ pub async fn scrivi_excel_fogli(
     let mut libro = Workbook::new();
     let mut elenchi = Vec::new();
 
+    // Le istruzioni per prime: in ultima posizione, aprendo il file non si
+    // vedevano (analisi del 25/09/2026).
+    scrivi_guida(&mut libro, &istruzioni)?;
     for foglio in &fogli {
         let dati = libro.add_worksheet();
         // Excel non accetta piu' di 31 caratteri, ne' : \ / ? * [ ]
         let nome = pulisci_nome(&foglio.nome);
         dati.set_name(&nome).map_err(|e| e.to_string())?;
+        if foglio.nascosto {
+            for (r, riga) in foglio.righe.iter().enumerate() {
+                for (c, v) in riga.iter().enumerate() {
+                    dati.write_string(r as u32, c as u16, v).map_err(|e| e.to_string())?;
+                }
+            }
+            dati.set_hidden(true);
+            continue;
+        }
         let alte = scrivi_dati(dati, &foglio.intestazioni, &foglio.gruppi, &foglio.righe, &foglio.menu, &mut elenchi)?;
         dati.set_freeze_panes(alte, 2).map_err(|e| e.to_string())?;
+        for &c in &foglio.colonne_nascoste {
+            dati.set_column_hidden(c).map_err(|e| e.to_string())?;
+        }
+        // Si porta in palestra: in orizzontale, larga quanto la pagina, e con
+        // titoli e nomi ripetuti su ogni pagina (prima erano cinque pagine e dalla
+        // seconda non si sapeva di chi fosse la riga).
+        dati.set_landscape();
+        dati.set_paper_size(9); // A4
+        dati.set_print_fit_to_pages(1, 0);
+        dati.set_repeat_rows(0, alte - 1).map_err(|e| e.to_string())?;
+        dati.set_repeat_columns(0, 1).map_err(|e| e.to_string())?;
     }
 
-    scrivi_guida(&mut libro, &istruzioni)?;
     scrivi_elenchi(&mut libro, &elenchi)?;
     libro
         .save(&percorso)
@@ -445,11 +474,18 @@ pub async fn leggi_excel_fogli(percorso: String) -> Result<Vec<(String, Vec<Vec<
             Err(_) => continue,
         };
         let mut righe = Vec::new();
+        // Le righe vuote in mezzo si tengono: se no dopo una riga vuota il
+        // numero di riga negli errori era quello di sopra. Si tolgono solo in
+        // fondo. Le righe partono dalla prima del foglio anche se e' vuota.
+        let (primo, _) = foglio.start().unwrap_or((0, 0));
+        for _ in 0..primo {
+            righe.push(Vec::new());
+        }
         for riga in foglio.rows() {
-            let celle: Vec<String> = riga.iter().map(cella_in_testo).collect();
-            if celle.iter().any(|c| !c.trim().is_empty()) {
-                righe.push(celle);
-            }
+            righe.push(riga.iter().map(cella_in_testo).collect::<Vec<String>>());
+        }
+        while righe.last().map_or(false, |r: &Vec<String>| r.iter().all(|c| c.trim().is_empty())) {
+            righe.pop();
         }
         fuori.push((nome, righe));
     }
@@ -615,21 +651,42 @@ mod prove {
         let t = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<String>>();
         b(scrivi_excel_fogli(
             p.clone(),
-            vec![FoglioDati {
-                nome: "UNDER 14".into(),
-                intestazioni: t(&["Cognome", "Nome", "Risposta", "Taglia", "Risposta", "Note"]),
-                righe: vec![t(&["Provetta", "Esempia", "mi manca", "M", "", ""])],
-                menu: vec![],
-                gruppi: t(&["", "", "Felpa", "Felpa", "Borsone", ""]),
-            }],
+            vec![
+                FoglioDati {
+                    nome: "UNDER 14".into(),
+                    intestazioni: t(&["Cognome", "Nome", "Risposta", "Taglia", "Risposta", "Note"]),
+                    righe: vec![t(&["Provetta", "Esempia", "mi manca", "M", "", ""]), t(&["", "", "", "", "", ""]),
+                        t(&["Esempia", "Provetta", "ce l'ho", "", "", ""])],
+                    menu: vec![],
+                    gruppi: t(&["", "", "Felpa", "Felpa", "Borsone", ""]),
+                    nascosto: false,
+                    colonne_nascoste: vec![4],
+                },
+                FoglioDati {
+                    nome: "Origine".into(),
+                    intestazioni: vec![],
+                    righe: vec![t(&["UNDER 14", "Provetta", "Esempia", "{}"])],
+                    menu: vec![],
+                    gruppi: vec![],
+                    nascosto: true,
+                    colonne_nascoste: vec![],
+                },
+            ],
             vec!["titolo\tMODULO".into()],
         ))
         .expect("scrittura");
         let fogli = b(leggi_excel_fogli(p)).expect("lettura");
-        let righe = &fogli[0].1;
+        // le istruzioni per prime, poi la squadra, poi il foglio nascosto
+        let nomi: Vec<&str> = fogli.iter().map(|x| x.0.as_str()).collect();
+        assert_eq!(nomi, vec!["Istruzioni", "UNDER 14", "Origine"]);
+        let righe = &fogli[1].1;
         assert_eq!(righe[0], t(&["Cognome", "Nome", "Felpa", "", "Borsone", "Note"]));
         assert_eq!(righe[1], t(&["", "", "Risposta", "Taglia", "Risposta", ""]));
         assert_eq!(righe[2], t(&["Provetta", "Esempia", "mi manca", "M", "", ""]));
+        // la riga vuota in mezzo resta: il numero di riga negli errori e' quello vero
+        assert!(righe[3].iter().all(|c| c.is_empty()));
+        assert_eq!(righe[4][0], "Esempia");
+        assert_eq!(fogli[2].1[0], t(&["UNDER 14", "Provetta", "Esempia", "{}"]));
         let _ = std::fs::remove_file(&f);
     }
 
