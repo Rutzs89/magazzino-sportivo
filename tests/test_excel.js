@@ -695,6 +695,62 @@ const carica = async (tipo, righe) => {
     w.document.querySelectorAll("#stag,[data-act=saveStag]").forEach((x) => x.remove());
   }
 
+  /* 9m. la colonna Pezzi: una richiesta per pezzo, andata e ritorno */
+  {
+    const scarica = async () => { await w.eval("scaricaModulo()"); await attendi(300); return modulo.scritto; };
+    const testa = (f) => [f.intestazioni.map((t, k) => (!f.gruppi[k] ? t : k > 0 && f.gruppi[k - 1] === f.gruppi[k] ? "" : f.gruppi[k])),
+      f.intestazioni.map((t, k) => (f.gruppi[k] ? t : ""))];
+    let m = await scarica();
+    const f = m.fogli.find((x) => !x.nascosto && x.righe.length);
+    const orig = () => { const o = modulo.scritto.fogli.find((x) => x.nascosto); return [o.nome, o.righe]; };
+    // un articolo di materiale con taglie, e un'atleta che non ne ha richieste
+    const kR = f.intestazioni.findIndex((t, j) => t === "Risposta" && f.intestazioni[j + 1] === "Taglia" && f.intestazioni[j + 2] === "Pezzi");
+    ok(kR > 0, "il materiale ha la colonna Pezzi accanto alla taglia");
+    const art = w.eval(`articoloDaNome(derive(),${JSON.stringify(f.gruppi[kR])}).nome`);
+    // una taglia con abbastanza pezzi in magazzino: le consegne non devono portarla sotto zero
+    const tg = w.eval(`(()=>{const a=articoloDaNome(derive(),${JSON.stringify(f.gruppi[kR])});return a.taglie.find(t=>(derive().stock[derive().key(a.nome,t)]||{ora:0}).ora>=5)||a.taglie[0]})()`);
+    const iR = f.righe.findIndex((r) => { const id = w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(r[0])}&&S.atlete[k].nome===${JSON.stringify(r[1])})`);
+      return id && !w.eval(`Object.values(S.richieste).some(q=>q.atletaId===${JSON.stringify(id)}&&q.articolo===${JSON.stringify(art)})`) && !w.eval(`Object.entries(derive().dotazione[${JSON.stringify(id)}]||{}).some(([k,v])=>v>0&&k.startsWith(${JSON.stringify(art + "|")}))`); });
+    const aid = w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(f.righe[iR][0])}&&S.atlete[k].nome===${JSON.stringify(f.righe[iR][1])})`);
+    const sue = () => Object.values(w.eval("S.richieste")).filter((q) => q.atletaId === aid && q.articolo === art).length;
+    const carica = async (riga) => { modulo.daLeggere = [[f.nome, [...testa(f), riga]], orig()]; await w.eval("caricaModulo()"); await attendi(1000); };
+    let riga = [...f.righe[iR]]; riga[kR] = "mi manca"; riga[kR + 1] = tg; riga[kR + 2] = "3";
+    await carica(riga);
+    ok(sue() === 3, `«mi manca» con 3 pezzi crea tre richieste (${sue()})`);
+    m = await scarica();
+    const f2 = m.fogli.find((x) => x.nome === f.nome);
+    const r2 = f2.righe.find((r) => r[0] === f.righe[iR][0] && r[1] === f.righe[iR][1]);
+    ok(r2[kR] === "mi manca" && r2[kR + 2] === "3", `riscaricando, il foglio mostra 3 pezzi (${r2[kR + 2]})`);
+    const riga2 = [...r2]; riga2[kR + 2] = "";
+    modulo.daLeggere = [[f2.nome, [...testa(f2), riga2]], orig()]; await w.eval("caricaModulo()"); await attendi(1000);
+    ok(sue() === 1, `portando i pezzi da 3 a 1 le due richieste in più si tolgono (${sue()})`);
+    // consegnato con 2 pezzi
+    m = await scarica();
+    const f3 = m.fogli.find((x) => x.nome === f.nome);
+    const r3 = [...f3.righe.find((r) => r[0] === f.righe[iR][0] && r[1] === f.righe[iR][1])];
+    r3[kR] = "consegnato"; r3[kR + 2] = "2";
+    const cons = () => Object.values(w.eval("S.movimenti")).filter((x) => x.tipo === "CONSEGNA" && x.atletaId === aid && x.articolo === art).reduce((n, x) => n + (Number(x.qta) || 0), 0);
+    modulo.daLeggere = [[f3.nome, [...testa(f3), r3]], orig()]; await w.eval("caricaModulo()"); await attendi(1200);
+    ok(cons() === 2 && sue() === 0, `«consegnato» con 2 pezzi registra due consegne (${cons()}) e chiude la richiesta`);
+    // ce l'ho con 2 pezzi, su un'altra atleta
+    const iC = f.righe.findIndex((r, i) => i !== iR && !w.eval(`Object.entries(derive().dotazione[Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(r[0])}&&S.atlete[k].nome===${JSON.stringify(r[1])})]||{}).some(([k,v])=>v>0&&k.startsWith(${JSON.stringify(art + "|")}))`));
+    const aidC = w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(f.righe[iC][0])}&&S.atlete[k].nome===${JSON.stringify(f.righe[iC][1])})`);
+    m = await scarica();
+    const f4 = m.fogli.find((x) => x.nome === f.nome);
+    const r4 = [...f4.righe.find((r) => r[0] === f.righe[iC][0] && r[1] === f.righe[iC][1])];
+    r4[kR] = "ce l’ho"; r4[kR + 1] = tg; r4[kR + 2] = "2";
+    modulo.daLeggere = [[f4.nome, [...testa(f4), r4]], orig()]; await w.eval("caricaModulo()"); await attendi(1000);
+    ok(w.eval(`(derive().dotazione[${JSON.stringify(aidC)}]||{})[${JSON.stringify(art + "|" + tg)}]`) === 2, "«ce l'ho» con 2 pezzi segna due pezzi posseduti");
+    // poi «ce l'ho» con 1: restano 2, con l'avviso del rientro da registrare
+    m = await scarica();
+    const f5 = m.fogli.find((x) => x.nome === f.nome);
+    const r5 = [...f5.righe.find((r) => r[0] === f.righe[iC][0] && r[1] === f.righe[iC][1])];
+    r5[kR + 2] = "1";
+    modulo.daLeggere = [[f5.nome, [...testa(f5), r5]], orig()]; await w.eval("caricaModulo()"); await attendi(1000);
+    ok(w.eval(`(derive().dotazione[${JSON.stringify(aidC)}]||{})[${JSON.stringify(art + "|" + tg)}]`) === 2 && ((w.eval("S.app.esitoExcel") || {}).avvisi || []).some((x) => /ne risultano 2, nel foglio 1/.test(x)),
+      "«ce l'ho» con 1 su chi ne ha 2: restano 2, con l'avviso del rientro da registrare");
+  }
+
   /* 9g. divisa dismessa: si annulla da Movimenti */
   {
     const id = w.eval("Object.keys(S.divise).find(k=>!S.divise[k].holder&&!S.divise[k].dismessa)");

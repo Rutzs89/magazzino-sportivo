@@ -267,6 +267,19 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   ok(suoi.length>=3,'i suoi movimenti restano nel registro con il nome scritto sopra');
   ok(!store.richieste.PROVA_USCITA,'e le sue richieste aperte spariscono');}
 
+ // --- «Segna da cambiare» apre subito la richiesta della divisa nuova ---
+ {const D0=w.eval('derive()');
+  const did=Object.keys(store.divise).find(id=>{const d=store.divise[id];return d.holder&&!d.daRestituire&&!d.dismessa&&store.atlete[d.holder]
+    &&!Object.values(store.richieste).some(r=>r.atletaId===d.holder&&D0.conNumero(r.articolo))});
+  const el=w.document.createElement('button');el.dataset.act='toggleDR';el.dataset.id=did;w.document.body.appendChild(el);
+  el.click();await wait(500);
+  const dlg=w.document.querySelector('#dlg');
+  ok(store.divise[did].daRestituire===true&&dlg.open&&w.document.querySelector('#rArt').value===w.eval('artDivisa()')&&/segnata da cambiare/.test(dlg.textContent),
+    '«Segna da cambiare» apre la richiesta della divisa nuova, già impostata');
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(400);
+  ok(Object.values(store.richieste).some(r=>r.atletaId===store.divise[did].holder&&r.articolo===w.eval('artDivisa()')),'e confermando la richiesta nasce');
+  el.remove();}
+
  // --- staff ed esterni: solo nome e ruolo, niente atlete ---
  {w.eval('dlgMovimento()');await wait(100);
   ok(!w.document.querySelector('#mChi'),'«Staff ed esterni» non offre le atlete: per loro ci sono scheda e Assegnazioni');
@@ -287,22 +300,26 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   ok(D1.stock[k].ora===st0+3&&D1.stock[k].ordinati===7,`Registra arrivo: +3 in magazzino e 3 in meno fra gli ordinati (${D1.stock[k].ora}, ${D1.stock[k].ordinati})`);
   w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`);await wait(100);
   w.document.querySelector('#mQ').value='2';
-  w.document.querySelector('#dlgForm button[value="rett"]').click();await wait(600);
+  {const r=w.document.querySelector('#dlgForm input[name="azione"][value="rett"]');r.checked=true;r.dispatchEvent(new w.Event('change',{bubbles:true}))}
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(600);
   D1=w.eval('derive()');
   ok(D1.stock[k].ora===2&&D1.stock[k].ordinati===7,'Correggi giacenza: la giacenza diventa quella contata, gli ordinati non cambiano');
   // «Salva ordinati»: solo i pezzi in arrivo, la giacenza non cambia
   w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`);await wait(100);
   // anche con una quantita' scritta, «Salva ordinati» tocca solo gli ordinati
   w.document.querySelector('#mQ').value='3';w.document.querySelector('#mOrd').value='5';
-  w.document.querySelector('#dlgForm button[value="ord"]').click();await wait(600);
+  {const r=w.document.querySelector('#dlgForm input[name="azione"][value="ord"]');r.checked=true;r.dispatchEvent(new w.Event('change',{bubbles:true}))}
+  ok(w.document.querySelector('#fQ').hidden&&w.document.querySelector('#dlgForm button[value="ok"]').textContent==='Salva ordinati','scegliendo «Ordine» restano solo gli ordinati e un pulsante solo, «Salva ordinati»');
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(600);
   D1=w.eval('derive()');
   ok(D1.stock[k].ora===2&&D1.stock[k].ordinati===5,`Salva ordinati: 5 in arrivo, la giacenza resta ${D1.stock[k].ora}`);
-  // Invio nella finestra del materiale non sceglie fra arrivo, inventario e dismissione
+  // Invio fa l'azione scelta e visibile in cima: qui «Inventario»
   w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`);await wait(100);
-  const q=w.document.querySelector('#mQ');q.value='1';
+  {const r=w.document.querySelector('#dlgForm input[name="azione"][value="rett"]');r.checked=true;r.dispatchEvent(new w.Event('change',{bubbles:true}))}
+  const q=w.document.querySelector('#mQ');q.value='4';
   q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await wait(600);
   D1=w.eval('derive()');
-  ok(D1.stock[k].ora===2&&w.document.querySelector('#dlg').open,'Invio nella finestra del materiale non registra niente: si sceglie il pulsante');
+  ok(D1.stock[k].ora===4,'Invio fa quello che è scelto in cima alla finestra (inventario: la giacenza diventa 4)');
   w.eval('closeDlg()');}
 
  // --- come nel programma installato: la conferma e' asincrona e la risposta e' no ---
@@ -321,8 +338,10 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
  {w.confirm=()=>true;
   const A='UNDER 17 NERA',B='UNDER 17 GIALLA';
   w.location.hash='#squadre';w.eval("S.ui.atlTab='elenco';changed()");await wait(300);
-  const menu=w.document.getElementById('gn_'+A);
-  ok(!!menu,'sulla riga della squadra c\'è il menu dei numeri in comune');
+  // il menu sta nella finestra «Impostazioni» della squadra, non piu' sulla riga
+  w.document.querySelector(`[data-act="impSq"][data-n="${A}"]`).click();await wait(200);
+  const menu=w.document.getElementById('dsNum');
+  ok(!!menu&&w.document.querySelector('#dlg').open,'nella finestra «Impostazioni» della squadra si sceglie con chi condividere i numeri');
   menu.value=B;menu.dispatchEvent(new w.Event('change',{bubbles:true}));await wait(400);
   const sq=()=>w.eval('S.settings.squadre');
   const gA=sq().find(x=>x.nome===A).gruppoNumeri,gB=sq().find(x=>x.nome===B).gruppoNumeri;
@@ -345,9 +364,11 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   ok(w.eval('doppioniPerSerie(derive())').filter(x=>x.serie.includes('+')).length===1,'e compare una volta sola, con il nome del gruppo');
   store.divise[dB[0]]={...store.divise[dB[0]],numero:numB};notify();await wait(200);
   // sciogliere: tornano numeri propri tutte e due
-  const menu2=w.document.getElementById('gn_'+B);menu2.value='';menu2.dispatchEvent(new w.Event('change',{bubbles:true}));await wait(400);
+  w.eval('closeDlg()');w.document.querySelector(`[data-act="impSq"][data-n="${B}"]`).click();await wait(200);
+  const menu2=w.document.getElementById('dsNum');menu2.value='';menu2.dispatchEvent(new w.Event('change',{bubbles:true}));await wait(400);
   ok(!sq().find(x=>x.nome===A).gruppoNumeri&&!sq().find(x=>x.nome===B).gruppoNumeri,'togliendo il collegamento da una delle due, il gruppo si scioglie');
-  ok(w.eval('derive()').occ[A]!==w.eval('derive()').occ[B],'e ognuna torna ai suoi numeri');}
+  ok(w.eval('derive()').occ[A]!==w.eval('derive()').occ[B],'e ognuna torna ai suoi numeri');
+  w.eval('closeDlg()');}
 
  // --- lotti di maglie da libero (giovanili e prima squadra) ---
  {w.__rispostaConferme=true;
