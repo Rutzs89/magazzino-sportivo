@@ -444,6 +444,54 @@ const carica = async (tipo, righe) => {
     ok(w.eval(`derive().stock[${JSON.stringify(k)}].ora`) === prima, "annullando, i pezzi buttati tornano in magazzino");
   }
 
+  /* 9d. il modulo esce compilato, e ricaricato com'e' non cambia niente */
+  {
+    await w.eval("scaricaModulo()");
+    await attendi(300);
+    const fogli = modulo.scritto.fogli;
+    const rigaTesta = (f) => [f.intestazioni.map((t, k) => (!f.gruppi[k] ? t : k > 0 && f.gruppi[k - 1] === f.gruppi[k] ? "" : f.gruppi[k])),
+      f.intestazioni.map((t, k) => (f.gruppi[k] ? t : ""))];
+    const risposte = fogli.flatMap((f) => f.righe.flatMap((r) => r.filter((c, k) => f.intestazioni[k] === "Risposta" && c)));
+    ok(risposte.includes("mi manca") && risposte.includes("ce l’ho"),
+      `il modulo esce con le risposte gia' scritte (${risposte.length} caselle compilate)`);
+    const foto = () => JSON.stringify([Object.keys(w.eval("S.richieste")).length, Object.keys(w.eval("S.movimenti")).length,
+      Object.values(w.eval("S.divise")).filter((x) => x.holder).length, Object.values(w.eval("S.divise")).filter((x) => x.daRestituire).length]);
+    const prima = foto();
+    modulo.daLeggere = fogli.map((f) => [f.nome, [...rigaTesta(f), ...f.righe]]);
+    await w.eval("caricaModulo()");
+    await attendi(1500);
+    ok(foto() === prima, `ricaricato senza modifiche, il modulo non cambia niente (${prima} -> ${foto()})`);
+
+    // «ce l'ho» al posto di «mi manca»: la richiesta si toglie
+    const f = fogli.find((x) => x.righe.some((r) => r.some((c, k) => x.intestazioni[k] === "Risposta" && c === "mi manca" && !w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(x.gruppi[k])}).nome)`))));
+    const ri = f.righe.findIndex((r) => r.some((c, k) => f.intestazioni[k] === "Risposta" && c === "mi manca" && !w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(f.gruppi[k])}).nome)`)));
+    const riga = [...f.righe[ri]];
+    const ci = riga.findIndex((c, k) => f.intestazioni[k] === "Risposta" && c === "mi manca" && !w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(f.gruppi[k])}).nome)`));
+    const artNome = w.eval(`articoloDaNome(derive(),${JSON.stringify(f.gruppi[ci])}).nome`);
+    const aidR = w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(riga[0])}&&S.atlete[k].nome===${JSON.stringify(riga[1])})`);
+    riga[ci] = "ce l’ho"; if (f.intestazioni[ci + 1] === "Taglia") riga[ci + 1] = "";
+    modulo.daLeggere = [[f.nome, [...rigaTesta(f), riga]]];
+    await w.eval("caricaModulo()");
+    await attendi(900);
+    ok(!Object.values(w.eval("S.richieste")).some((r) => r.atletaId === aidR && r.articolo === artNome),
+      "«ce l'ho» al posto di «mi manca»: la richiesta aperta si toglie");
+
+    // taglia della divisa cambiata: la richiesta si corregge, non se ne aggiunge una
+    const fd = fogli.find((x) => x.righe.some((r) => r[x.intestazioni.findIndex((t, k) => t === "Risposta" && w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(x.gruppi[k])}).nome)`))] === "mi manca"));
+    if (fd) {
+      const di = fd.intestazioni.findIndex((t, k) => t === "Risposta" && w.eval(`derive().conNumero(articoloDaNome(derive(),${JSON.stringify(fd.gruppi[k])}).nome)`));
+      const rd = [...fd.righe.find((r) => r[di] === "mi manca")];
+      const aidD = w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(rd[0])}&&S.atlete[k].nome===${JSON.stringify(rd[1])})`);
+      const nuova = ["XS", "S", "M", "L", "XL"].find((t) => t !== rd[di + 1]);
+      rd[di + 1] = nuova;
+      modulo.daLeggere = [[fd.nome, [...rigaTesta(fd), rd]]];
+      await w.eval("caricaModulo()");
+      await attendi(900);
+      const sueD = Object.values(w.eval("S.richieste")).filter((r) => r.atletaId === aidD && r.articolo === "DIVISA GARA" && !r.modello);
+      ok(sueD.length === 1 && sueD[0].taglia === nuova, `taglia della divisa cambiata: una richiesta sola, corretta (${sueD.map((r) => r.taglia)})`);
+    }
+  }
+
   /* 10. i quattro fogli: scaricati dal programma e ricaricati tali e quali */
   const conta = () => ({
     articoli: w.eval("S.settings.articoli.length"),

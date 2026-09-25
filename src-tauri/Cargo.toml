@@ -1,6 +1,6 @@
 [package]
 name = "magazzino"
-version = "0.3.13"
+version = "0.3.14"
 description = "Magazzino divise e materiale per societa sportive"
 authors = ["Andrea Rota"]
 edition = "2021"

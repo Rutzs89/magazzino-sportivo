@@ -1678,7 +1678,7 @@ function vManuale(){
 
   ${sezione('Fogli Excel',`
     <p>In <b>Impostazioni → Fogli Excel</b> si trovano tutti i file che il programma scarica e carica: il modulo di distribuzione, i quattro fogli dei dati e il registro dei movimenti. L'unico altro file è la <b>lista di squadra</b>, sulla riga di ogni squadra.</p>
-    <p>Il <b>modulo di distribuzione</b> è destinato ai dirigenti: contiene un foglio per squadra con gli atleti già inseriti e gli articoli della stagione in corso. Ogni articolo ha il nome nella prima riga dell'intestazione e, sotto, due colonne: la <i>Risposta</i> (<i>ce l'ho</i>, <i>mi manca</i>, <i>da cambiare</i>, dal menu a tendina; la casella vuota equivale a <i>ce l'ho</i>) e la <i>Taglia</i>, dal menu con le taglie dell'articolo: con <i>mi manca</i> e <i>da cambiare</i> è quella da consegnare, con <i>ce l'ho</i> è quella posseduta; gli articoli senza taglie hanno la sola risposta. La colonna <i>Numero maglia</i> riporta il numero attuale; la colonna <i>Note</i> è libera. Al caricamento vengono creati squadre, atleti e richieste; con <i>ce l'ho</i> e la taglia il capo viene registrato come già in possesso dell'atleta, senza modificare le giacenze (per la divisa serve anche il numero di maglia: la divisa passa all'atleta, oppure viene creata se non era in archivio); un foglio copiato dentro Excel viene ricondotto alla sua squadra, e un foglio che non corrisponde a nessuna squadra viene segnalato prima di crearne una nuova.</p>
+    <p>Il <b>modulo di distribuzione</b> è destinato ai dirigenti: contiene un foglio per squadra con gli atleti già inseriti e gli articoli della stagione in corso. Ogni articolo ha il nome nella prima riga dell'intestazione e, sotto, due colonne: la <i>Risposta</i> (<i>ce l'ho</i>, <i>mi manca</i>, <i>da cambiare</i>, dal menu a tendina; la casella vuota equivale a <i>ce l'ho</i>) e la <i>Taglia</i>, dal menu con le taglie dell'articolo: con <i>mi manca</i> e <i>da cambiare</i> è quella da consegnare, con <i>ce l'ho</i> è quella posseduta; gli articoli senza taglie hanno la sola risposta. La colonna <i>Numero maglia</i> riporta il numero attuale; la colonna <i>Note</i> è libera. Il foglio esce già compilato con quanto risulta al programma (ce l'ho, mi manca, da cambiare, con le taglie): chi lo compila modifica solo le caselle che non corrispondono, e al caricamento le righe non modificate non producono effetti. Al caricamento vengono creati squadre, atleti e richieste; <i>ce l'ho</i> scritto su un articolo con una richiesta aperta toglie la richiesta, una taglia diversa la corregge; con <i>ce l'ho</i> e la taglia il capo viene registrato come già in possesso dell'atleta, senza modificare le giacenze (per la divisa serve anche il numero di maglia: la divisa passa all'atleta, oppure viene creata se non era in archivio); un foglio copiato dentro Excel viene ricondotto alla sua squadra, e un foglio che non corrisponde a nessuna squadra viene segnalato prima di crearne una nuova.</p>
     <p>Gli altri quattro fogli servono al caricamento iniziale e vanno caricati in quest'ordine: <b>Articoli e magazzino</b>, <b>Squadre e atleti</b>, <b>Divise da gara</b>, <b>Richieste</b>. Vengono scaricati già compilati con i dati presenti nel programma, con in fondo alcune colonne solo informative (per esempio consegnati, prenotati e magazzino finale per gli articoli, esito e numero proposto per le richieste), che al caricamento vengono ignorate. Il foglio <b>Movimenti</b> si scarica soltanto. Le colonne sono riconosciute dal titolo: un foglio con colonne mancanti o ripetute viene rifiutato.</p>
     <p>Le taglie devono corrispondere a quelle previste per l'articolo; negli articoli delle richieste si può indicare il nome, il codice o il nome visualizzato. Il caricamento aggiunge soltanto: i dati già presenti non vengono modificati, il caricamento ripetuto dello stesso file non crea duplicati e non ricrea le richieste già consegnate.</p>
     <p>Nei fogli scaricati ogni casella è guidata: selezionandola, Excel mostra cosa inserire. Le colonne con valori prestabiliti hanno un <b>menu a tendina</b> (risposte, taglie, squadre, lotti, articoli, cognomi e nomi degli atleti già caricati, sì/no); i numeri accettano solo interi nell'intervallo previsto. In alto, le colonne <i>da compilare</i> sono separate da quelle <i>solo informative</i>, in grigio; le obbligatorie hanno il titolo più scuro. Il foglio <i>Istruzioni</i> descrive ogni colonna.</p>
@@ -3014,7 +3014,7 @@ function prossimoOrdine(squadre){return squadre.reduce((m,x)=>Math.max(m,Number(
 /* Il risultato di un caricamento, di prova o vero. "problemi" sono gli
    errori (la riga non viene caricata), "avvisi" le righe caricate che
    conviene verificare. */
-function nuovoEsito(){return {creati:0,aggiornati:0,posseduti:0,saltati:0,problemi:[],avvisi:[],squadreNuove:[],lottiNuovi:[]}}
+function nuovoEsito(){return {creati:0,aggiornati:0,posseduti:0,tolti:0,saltati:0,problemi:[],avvisi:[],squadreNuove:[],lottiNuovi:[]}}
 const SI=v=>/^(s|si|x|1|vero|yes)$/.test(norm(v).trim());
 const NO=v=>/^(n|no|0|falso)$/.test(norm(v).trim());
 const siNoValido=v=>!String(v??'').trim()||SI(v)||NO(v);
@@ -3534,6 +3534,28 @@ function modMenu(D){
 /* Il foglio esce gia' con dentro gli atleti che il programma conosce, e il
    numero di maglia che hanno: chi compila trova la sua squadra e riempie solo
    le caselle, senza riscrivere i nomi. */
+/* Anche le risposte escono gia' scritte, con quello che il programma sa:
+   chi compila cambia solo le caselle che non vanno, e ricaricando il foglio
+   le righe non toccate non producono niente (decisione di Andrea, 25/09/2026:
+   "ridurre al minimo i copia incolla"). Una casella resta vuota solo se del
+   capo non si sa niente. */
+function modRisposte(D,id,art){
+  const conNum=D.conNumero(art.nome);
+  const ric=Object.values(S.richieste).filter(r=>r.atletaId===id&&r.articolo===art.nome&&(!conNum||tipoLotto(r.modello||'')!=='libero'));
+  if(conNum){
+    const sua=(D.perAtleta[id]||[]).map(x=>S.divise[x]).find(x=>x&&tipoLotto(x.modello)!=='libero');
+    if(sua&&sua.daRestituire)return ['da cambiare',ric[0]?ric[0].taglia:''];
+    if(ric.length)return ['mi manca',ric[0].taglia];
+    if(sua)return ['ce l’ho',sua.taglia];
+    return ['',''];
+  }
+  // la taglia che ha, se ne ha: quella con piu' pezzi
+  const ha=Object.entries(D.dotazione[id]||{}).filter(([k,v])=>v>0&&k.split('|')[0]===art.nome).sort((x,y)=>y[1]-x[1]);
+  const tg=t=>t==='UNICA'?'':t;
+  if(ric.length)return [ha.length?'da cambiare':'mi manca',tg(ric[0].taglia)];
+  if(ha.length)return ['ce l’ho',tg(ha[0][0].split('|')[1])];
+  return ['',''];
+}
 function modRighe(D,squadra){
   const arts=modArticoli(D);
   return Object.entries(S.atlete)
@@ -3543,7 +3565,7 @@ function modRighe(D,squadra){
       const divisa=(D.perAtleta[id]||[]).map(x=>S.divise[x])
         .find(x=>x&&(x.modello||'STANDARD')===(D.lotto[squadra]||'STANDARD'));
       const riga=[a.cognome,a.nome,divisa?String(divisa.numero):''];
-      for(const art of arts){riga.push('');if(modConTaglie(art))riga.push('')}
+      for(const art of arts){const [r,t]=modRisposte(D,id,art);riga.push(r);if(modConTaglie(art))riga.push(t)}
       riga.push(a.note||'');
       return riga});
 }
@@ -3563,14 +3585,19 @@ function modIstruzioni(D){
    'Risposte:',
    'Nella colonna Risposta si sceglie dal menu a tendina una di queste tre',
    'risposte:',
-   '   ce l’ho       l’atleta lo possiede già: non viene creata alcuna richiesta;',
-   '                 con la taglia indicata il capo viene registrato come suo,',
-   '                 senza modificare le giacenze del magazzino',
+   '   ce l’ho       l’atleta lo possiede già: non viene creata alcuna richiesta',
+   '                 e un’eventuale richiesta aperta viene tolta; con la taglia',
+   '                 indicata il capo viene registrato come suo, senza modificare',
+   '                 le giacenze del magazzino',
    '   mi manca      l’atleta ne ha bisogno: viene creata una richiesta',
    '   da cambiare   va sostituito: viene creata una richiesta e il capo attuale',
    '                 risulta da restituire',
    '',
-   'La casella vuota equivale a "ce l’ho".',
+   'La casella vuota equivale a "ce l’ho", ma non toglie richieste aperte.',
+   '',
+   'Il foglio esce già compilato con quanto risulta al programma: è sufficiente',
+   'modificare le caselle che non corrispondono e aggiungere in fondo gli atleti',
+   'nuovi. Le righe non modificate, al caricamento, non producono alcun effetto.',
    '',
    'Colonne:',
    'Cognome, Nome   obbligatori',
@@ -3589,6 +3616,8 @@ function modIstruzioni(D){
    'Caricamento:',
    'Il caricamento ripetuto dello stesso file non crea duplicati: gli atleti già',
    'presenti, le richieste uguali e gli articoli già consegnati vengono ignorati.',
+   'Una taglia modificata corregge la richiesta aperta. Le consegne già',
+   'registrate non vengono mai modificate.',
    '',
    'Dati personali:',
    'Non inserire indirizzi email, numeri di telefono o date delle visite mediche:',
@@ -3731,7 +3760,7 @@ async function caricaModulo(){
   const prova=await eseguiModulo(D,daFare,true);
   prova.problemi.unshift(...problemi);prova.avvisi.unshift(...avvisiModulo);
   prova.squadreNuove=[...squadreNuove];
-  if(!prova.creati&&!prova.aggiornati&&!prova.posseduti){mostraEsitoExcel('Modulo di distribuzione',prova,'nessun dato nuovo da caricare');return}
+  if(!prova.creati&&!prova.aggiornati&&!prova.posseduti&&!prova.tolti){mostraEsitoExcel('Modulo di distribuzione',prova,'nessun dato nuovo da caricare');return}
   if(!await chiedi(riepilogoCaricamento('Modulo di distribuzione',prova,{creati:['atleta nuovo','atleti nuovi'],aggiornati:['richiesta nuova o corretta','richieste nuove o corrette']})))return;
   S.busy=true;render();
   let esito;
@@ -3857,6 +3886,21 @@ async function eseguiModulo(D,daFare,prova){
       for(const x of Object.values(d.articoli)){
         const r=modRisposta(x.risposta);
         if(r==='?'){esito.problemi.push(`${d.q}: ${d.cognome} ${d.nome}: risposta "${x.risposta}" non riconosciuta per ${artLabel(x.art.nome)} (ammesse: ce l’ho, mi manca, da cambiare)`);continue}
+        // Il foglio e' la verita' per la squadra (Andrea, 25/09/2026: "se sono
+        // tanti i cambiamenti"): «ce l'ho» scritto su un capo con una richiesta
+        // aperta la toglie. Solo se scritto: la casella vuota non toglie niente,
+        // nei fogli vecchi vuoto voleva dire "ce l'ho" e sparirebbe tutto.
+        if(r==='ha'){
+          const k=KEY(aid+'|'+x.art.nome);const conN=D.conNumero(x.art.nome);
+          const via=(aperte[k]||[]).filter(([,q])=>!conN||tipoLotto(q.modello||'')!=='libero');
+          for(const [rid,q] of via){
+            if(!prova&&rid&&S.richieste[rid])await S.db.doc('richieste/'+rid).delete();
+            esito.tolti++;esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome}: nel modulo «ce l’ho» per ${artLabel(x.art.nome)}: tolta la richiesta${q.taglia&&q.taglia!=='UNICA'?' in taglia '+q.taglia:''}`)}
+          if(via.length)aperte[k]=(aperte[k]||[]).filter(e=>!via.includes(e));
+          // la divisa che doveva cambiare, se ormai la tiene, non rientra piu'
+          if(conN&&via.length){const dc=Object.entries(S.divise).find(([,dv])=>dv.holder===aid&&!dv.dismessa&&dv.daRestituire&&stessoGenere(dv.modello,''));
+            if(dc&&!prova)await S.db.doc('divise/'+dc[0]).update({daRestituire:false})}
+        }
         // "ce l'ho" (o la casella vuota) con la taglia scritta: si segna che
         // l'atleta ce l'ha. Senza taglia non c'e' niente da segnare. Un articolo
         // di taglia unica si segna solo con "ce l'ho" scritto: la casella vuota
@@ -3880,10 +3924,13 @@ async function eseguiModulo(D,daFare,prova){
         // divisa consegnata a mano la mattina, poi «la devo cambiare» nel modulo).
         if(r!=='cambia'&&consegnati.has(KEY(aid+'|'+x.art.nome+'|'+(conNum?'':taglia)))){esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome} ha già ricevuto ${artLabel(x.art.nome)} in questa stagione: richiesta non creata`);esito.saltati++;continue}
         const stesse=aperte[KEY(aid+'|'+x.art.nome)]||[];
-        if(stesse.some(([,r])=>r.taglia===taglia)){esito.saltati++;continue}
-        if(stesse.length&&!conNum){
-          // stessa cosa, taglia diversa: la richiesta si corregge
-          const [rid]=stesse[0];if(!prova)await S.db.doc('richieste/'+rid).update({taglia});stesse[0][1]={...stesse[0][1],taglia};
+        // per la divisa contano le richieste della divisa da gara, non dei liberi
+        const corr=conNum?stesse.filter(([,q])=>tipoLotto(q.modello||'')!=='libero'):stesse;
+        if(corr.some(([,r])=>r.taglia===taglia)){esito.saltati++;continue}
+        if(corr.length){
+          // stessa cosa, taglia diversa: la richiesta si corregge. Anche la
+          // divisa: prima ne nasceva una seconda accanto alla vecchia.
+          const [rid]=corr[0];if(!prova)await S.db.doc('richieste/'+rid).update({taglia});corr[0][1]={...corr[0][1],taglia};
           esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome}: la richiesta di ${artLabel(x.art.nome)} passa alla taglia ${taglia}`);
           esito.aggiornati++;continue}
         const nuova={atletaId:aid,articolo:x.art.nome,taglia,modello:'',numeroDesiderato:null,note:'',ordine:Date.now()};
@@ -3954,6 +4001,7 @@ function riepilogoCaricamento(nome,e,voci){
   if(e.aggiornati&&voci.aggiornati)da.push(n(e.aggiornati,'aggiornati'));
   if(e.posseduti)da.push(`${e.posseduti} ${e.posseduti===1?'capo già in possesso':'capi già in possesso'}`);
   righe.push(`Da aggiungere: ${da.join(', ')||'niente'}.`);
+  if(e.tolti)righe.push(`Da togliere: ${e.tolti} ${e.tolti===1?'richiesta, indicata come «ce l’ho»':'richieste, indicate come «ce l’ho»'} (l’elenco è fra gli avvisi).`);
   if(e.saltati)righe.push(`Già presenti, ignorati: ${e.saltati}.`);
   if(e.squadreNuove&&e.squadreNuove.length)righe.push(`Squadre nuove: ${e.squadreNuove.join(', ')}.`);
   if(e.lottiNuovi&&e.lottiNuovi.length)righe.push(`Lotti di divise nuovi: ${e.lottiNuovi.join(', ')}.`);
@@ -3968,6 +4016,7 @@ function sintesiEsito(e,voci){
   if(e.creati)pezzi.push(`${e.creati} ${e.creati===1?voci.creati[0]:voci.creati[1]}`);
   if(e.aggiornati&&voci.aggiornati)pezzi.push(`${e.aggiornati} ${e.aggiornati===1?voci.aggiornati[0]:voci.aggiornati[1]}`);
   if(e.posseduti)pezzi.push(`${e.posseduti} ${e.posseduti===1?'capo già in possesso':'capi già in possesso'}`);
+  if(e.tolti)pezzi.push(`${e.tolti} ${e.tolti===1?'richiesta tolta':'richieste tolte'}`);
   if(e.saltati)pezzi.push(`${e.saltati} già presenti`);
   if(e.problemi.length)pezzi.push(`${e.problemi.length} con errori`);
   return pezzi.join(', ')||'Niente da aggiungere';
