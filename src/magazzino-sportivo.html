@@ -49,7 +49,10 @@
    soprattutto le intestazioni delle tabelle non scappano via. */
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
-  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden;overflow:clip}
+/* clip e non solo hidden: una pagina «nascosta» si puo' ancora far scorrere dal
+   programma, e cliccando in un campo vicino al bordo tutto si spostava di lato
+   tagliando i bordi (visto da Andrea, 26/09/2026). */
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:inherit}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -251,6 +254,9 @@ body.inCasa #view{display:flex;flex-direction:column;justify-content:center;min-
 /* Una riga in conflitto si vede anche senza leggere: un numero portato da due
    persone della stessa squadra si scopre in palestra, ed e' tardi. */
 .item.conflitto{box-shadow:inset 3px 0 0 var(--bad)}
+/* scheda di un atleta con l'eliminazione in corso: si deve vedere subito */
+.avvisoUscita{background:var(--bad-soft);border:1px solid var(--bad);border-left-width:5px;border-radius:var(--radius);padding:10px 14px;margin:8px 0 10px}
+.avvisoUscita b{color:var(--bad)}
 tr.conflitto th,tr.conflitto td{background:var(--bad-soft)}
 .allarmeHome{text-align:center;margin:22px 0 0}
 .allarmeHome a{display:inline-block;background:var(--bad-soft);border-left:4px solid var(--bad);
@@ -523,6 +529,15 @@ const S={tema:(()=>{try{return localStorage.getItem('tema')||null}catch(e){retur
    finche' una societa' non carica il suo da Impostazioni. */
 const MARCHIO=`<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M11 4 4 7l2 6 3-1v16h14V12l3 1 2-6-7-3a5 5 0 0 1-10 0Z" fill="currentColor"/></svg>`;
 const SZ=['XXS','XS','S','M','L','XL','XXL'];
+/* Le taglie delle divise: quelle scritte sull'articolo della divisa da gara,
+   e solo se non ce ne sono l'elenco da adulto. Prima le finestre delle divise
+   usavano sempre XXS-XXL, e una taglia da bambino si poteva mettere solo da
+   Excel (26/09/2026). */
+function taglieDivisa(){
+  const a=((S.settings&&S.settings.articoli)||[]).find(x=>x.nome===artDivisa());
+  const t=(a&&a.taglie||[]).filter(x=>x&&x!=='UNICA');
+  return t.length?t:SZ;
+}
 /* L'ordine delle taglie e' quello dei ripiani, non l'alfabeto. Le taglie a
    numero (35-37, oppure 5-6 anni) non stanno nell'elenco delle lettere: si
    mettono in fila per il primo numero che contengono, se no "11-12 anni"
@@ -1097,13 +1112,14 @@ function vAtleta(id){
   const req=D.order.filter(rid=>S.richieste[rid]&&S.richieste[rid].atletaId===id);
   const dot=Object.entries(D.dotazione[id]||{}).filter(([k,v])=>v>0);
   let h=`<a class="back" href="#atlete">‹ Atleti</a><h1>${esc(fullName(a))}</h1>
-  <p class="sub">${esc(teamLabel(a.squadra))}${collegati(id).length?' · gioca anche in '+collegati(id).map(x=>`<a href="#atleta/${encodeURIComponent(x)}">${esc(teamLabel(S.atlete[x].squadra))}</a>`).join(', ')+' (il materiale si consegna una volta sola)':''}${a.inUscita?' · <b>eliminazione in attesa di riconsegna</b>':''}${a.attiva===false?' · non attivo':''}${a.note?' · '+esc(a.note):''}</p>
+  <p class="sub">${esc(teamLabel(a.squadra))}${collegati(id).length?' · gioca anche in '+collegati(id).map(x=>`<a href="#atleta/${encodeURIComponent(x)}">${esc(teamLabel(S.atlete[x].squadra))}</a>`).join(', ')+' (il materiale si consegna una volta sola)':''}${a.attiva===false?' · non attivo':''}${a.note?' · '+esc(a.note):''}</p>
+  ${a.inUscita?`<div class="avvisoUscita" role="status"><b>Eliminazione in attesa di riconsegna.</b> L’atleta non riceve altre consegne. Alla restituzione dell’ultimo capo il programma propone la cancellazione; salvando la scheda con «Modifica atleta» l’eliminazione si annulla.</div>`:''}
   <div class="row-actions"><button type="button" class="btn yellow" data-act="diretta" data-id="${esc(id)}">Consegna diretta</button>
   <button type="button" class="btn" data-act="newRichiesta" data-id="${esc(id)}">Nuova richiesta</button>
   <button type="button" class="btn" data-act="editAtleta" data-id="${esc(id)}">Modifica atleta</button>
   <button type="button" class="btn ghost danger" data-act="eliminaAtl" data-id="${esc(id)}">Elimina atleta…</button></div>`;
   h+=legenda(`<p>La scheda riporta le divise e il materiale in possesso dell'atleta e le sue richieste aperte. <b>Consegna diretta</b> registra una consegna senza passare da una richiesta; <b>Nuova richiesta</b> aggiunge una richiesta; <b>Modifica atleta</b> consente di cambiare i dati, la squadra, il collegamento con la scheda di un'altra squadra e di eliminare l'atleta.</p>
-    <p>Su ogni divisa, <b>Segna da cambiare</b> la indica come da sostituire e <b>Restituita</b> ne registra il rientro; sul materiale, <b>Restituito</b> registra il rientro dei pezzi.</p>`,vociDivise(false));
+    <p>Su ogni divisa, <b>Segna da cambiare</b> la indica come da sostituire e <b>Restituita</b> ne registra il rientro; sul materiale, <b>Restituito</b> registra il rientro dei pezzi.</p>`,vociDivise(true));
   h+=`<h2>Divise</h2>`;
   if(!divs.length)h+=`<div class="list"><p class="empty">Nessuna divisa assegnata. Si assegna con una nuova richiesta oppure con la consegna diretta.</p></div>`;
   else h+=`<div class="list">`+divs.map(([did,d])=>`<div class="item">${chip(d,'big')}<div class="main"><div class="name">${esc(nomeLotto(d.modello))}</div>
@@ -1460,7 +1476,7 @@ function vRiepilogo(){
   html+=doppioni.length
     ? `<div class="notice bad"><b>${doppioni.length} ${doppioni.length===1?'numero ripetuto':'numeri ripetuti'}</b> dentro una squadra o un gruppo di squadre: `
       +doppioni.map(x=>`${esc(x.serie)} n.${esc(x.numero)} (${x.chi.map(esc).join(' e ')})`).join(' \u00b7 ')+`</div>`
-    : `<div class="notice ok">Nessun numero ripetuto: in ogni squadra ogni numero e\u2019 di una persona sola.</div>`;
+    : `<div class="notice ok">Nessun numero ripetuto: in ogni squadra ogni numero \u00e8 di una persona sola.</div>`;
 
   const doppi=conNumeroDoppio(D);
   const totali={};let totDivise=0;
@@ -2523,7 +2539,7 @@ function dlgAtleta(id){
   ${actions(id?'Salva modifiche':'Aggiungi atleta',
     id?`<button class="btn danger" value="elimina" style="margin-right:auto">Elimina</button>`:'')}`,async(fd,btn)=>{
     if(btn==='elimina'){setTimeout(()=>eliminaAtleta(id),0);return true}
-    const body={cognome:fd.cognome.trim(),nome:fd.nome.trim(),squadra:fd.squadra,note:fd.note||''};
+    const body={cognome:conAccenti(fd.cognome.trim()),nome:conAccenti(fd.nome.trim()),squadra:fd.squadra,note:fd.note||''};
     if(id){body.attiva=fd.attiva==='on';
       // Salvando la scheda di chi era in uscita si torna indietro: e' il modo
       // piu' semplice per dire "ha cambiato idea, resta".
@@ -2641,7 +2657,7 @@ function dlgDivisa(id){
   if(d){const pr=D.prenDivisa[id];const r=pr&&S.richieste[pr];
     openDlg(`<h2>Divisa</h2><div class="item" style="padding:6px 0">${chip(d,'big')}<div class="main"><div class="name">${d.holder?esc(fullName(S.atlete[d.holder])):'In magazzino'}</div>
     <div class="meta">${d.holder?(d.daRestituire?'da cambiare':'in uso')+' · '+esc(teamLabel(S.atlete[d.holder].squadra)):(d.fuoriUso?'fuori uso':'disponibile')}${r?' \u00b7 prenotata per '+esc(fullName(S.atlete[r.atletaId])):''}</div></div></div>
-    <div class="two"><div class="field"><label for="dTg">Taglia</label><select id="dTg" name="taglia">${[...new Set([...SZ,d.taglia])].map(t=>`<option${t===d.taglia?' selected':''}>${esc(t)}</option>`).join('')}</select></div>
+    <div class="two"><div class="field"><label for="dTg">Taglia</label><select id="dTg" name="taglia">${[...new Set([...taglieDivisa(),d.taglia])].map(t=>`<option${t===d.taglia?' selected':''}>${esc(t)}</option>`).join('')}</select></div>
     <div class="field"><label for="dNum">Numero</label><input type="number" id="dNum" name="numero" min="0" max="99" required inputmode="numeric" value="${esc(d.numero)}"></div></div>
     <div class="field"><label for="dMod">Lotto</label><select id="dMod" name="modello">${[...new Set([...(D.set.modelli||['STANDARD']),d.modello||'STANDARD'])].map(m=>`<option value="${esc(m)}"${(d.modello||'STANDARD')===m?' selected':''}>${esc(nomeLotto(m,true))}</option>`).join('')}</select></div>
     <div class="field"><label for="dNote">Nota</label><input type="text" id="dNote" name="note" value="${esc(d.note||'')}" maxlength="200"></div>
@@ -2675,7 +2691,7 @@ function dlgDivisa(id){
       const ok=await w(()=>S.db.doc('divise/'+id).update({taglia:tg,numero:num,modello:mod,note:fd.note||''}));
       if(ok)toast(cambia?`Divisa corretta: ${tg} n.${num} · ${cap(mod)}`:'Nota salvata');return ok});return}
   openDlg(`<h2>Aggiungi divisa</h2><p class="sub">Per un capo nuovo arrivato in magazzino.</p>
-  <div class="two"><div class="field"><label for="nTg">Taglia</label><select id="nTg" name="taglia">${SZ.map(t=>`<option${t==='M'?' selected':''}>${t}</option>`).join('')}</select></div>
+  <div class="two"><div class="field"><label for="nTg">Taglia</label><select id="nTg" name="taglia">${(()=>{const t=taglieDivisa();const pre=t.includes('M')?'M':t[0];return t.map(x=>`<option${x===pre?' selected':''}>${esc(x)}</option>`).join('')})()}</select></div>
   <div class="field"><label for="nNum">Numero</label><input type="number" id="nNum" name="numero" min="0" max="99" required inputmode="numeric"></div></div>
   <div class="field"><label for="nMod">Lotto</label><select id="nMod" name="modello">${(D.set.modelli||['STANDARD']).map(m=>`<option value="${esc(m)}">${esc(nomeLotto(m,true))}</option>`).join('')}</select></div>
   <div class="field"><label for="nNote">Nota</label><input type="text" id="nNote" name="note" maxlength="200"></div>
@@ -2867,7 +2883,8 @@ document.addEventListener('change',async e=>{
   const el=e.target;if(!el.dataset||el.dataset.act!=='modCampo')return;
   const id=el.dataset.id;
       const a=S.atlete[id];if(!a)return;
-      const campo=el.dataset.f;const v=campo==='squadra'?el.value:el.value.trim();
+      const campo=el.dataset.f;const v=campo==='squadra'?el.value:conAccenti(el.value.trim());
+      if(v!==el.value.trim()&&campo!=='squadra')el.value=v;
       if(v===a[campo])return;                    // niente da salvare
       if(campo!=='squadra'&&!v){el.value=a[campo];toast('Cognome e nome non possono restare vuoti');return}
       if(campo==='squadra'&&(!v||!(await preparaSpostamento(id,v)))){el.value=a.squadra;return}
@@ -3042,7 +3059,18 @@ Il programma salva i dati, si chiude e si riapre automaticamente. I dati non ven
    L'ordine conta, ed e' scritto nelle istruzioni di ogni foglio: prima gli
    articoli, poi le squadre con gli atleti, poi le divise, poi le richieste. */
 const COL=(r,i)=>String((r&&r[i])??'').trim();
-const KEY=s=>norm(s).replace(/\s+/g,' ').trim();
+// Una vocale con l'apostrofo a fine parola (non seguita da una lettera) vale la
+// vocale accentata: «Provato'» e «Provatò» sono lo stesso nome (spesso l'accento
+// arriva scritto cosi' dai fogli delle societa', 26/09/2026). Tranne le parole
+// che l'apostrofo lo vogliono davvero: po', mo', be', di', fa', va', sta', da'
+// (osservazione di Andrea).
+const APOSTROFO_VERO=new Set(['po','mo','be','di','fa','va','sta','da']);
+const RE_APO=/([A-Za-z\u00c0-\u024f]*)([aeiouAEIOU])['\u2019`\u00b4](?![A-Za-z0-9\u00c0-\u024f])/g;
+const KEY=s=>norm(s).replace(RE_APO,(m,prima,v)=>APOSTROFO_VERO.has((prima+v).toLowerCase())?m:prima+v).replace(/\s+/g,' ').trim();
+/* Il nome da salvare: vocale + apostrofo a fine parola diventa la vocale con
+   l'accento (Provato' -> Provatò, Esempiu' -> Esempiù), ma po' resta po'. */
+const ACCENTO={a:'à',e:'è',i:'ì',o:'ò',u:'ù',A:'À',E:'È',I:'Ì',O:'Ò',U:'Ù'};
+const conAccenti=s=>String(s??'').replace(RE_APO,(m,prima,v)=>APOSTROFO_VERO.has((prima+v).toLowerCase())?m:prima+ACCENTO[v]);
 /* Il nome di un foglio Excel come lo scrive la parte Rust: al massimo 31
    caratteri, senza : \ / ? * [ ]. Serve saperlo anche qui, per ritrovare la
    squadra quando il file torna indietro. */
@@ -3307,7 +3335,7 @@ const MODELLI_EXCEL={
    const visti=new Set();let sqScritte=false;
    for(const [i,riga] of righe.entries()){
     const q=nr(i);
-    const sq=COL(riga,0).toUpperCase();const cog=COL(riga,1);const nom=COL(riga,2);
+    const sq=COL(riga,0).toUpperCase();const cog=conAccenti(COL(riga,1));const nom=conAccenti(COL(riga,2));
     if(!sq||!cog||!nom){if(sq||cog||nom)r.problemi.push(`${q}: ${quali([!sq&&'la squadra',!cog&&'il cognome',!nom&&'il nome'])} ${[!sq,!cog,!nom].filter(Boolean).length===1?'manca':'mancano'}`);else r.saltati++;continue}
     if(!siNoValido(COL(riga,4))){r.problemi.push(`${q}: «Attivo» vale "${COL(riga,4)}"; valori ammessi: sì, no oppure vuoto`);continue}
     if(/[0-9@#]/.test(cog+nom))r.avvisi.push(`${q}: ${cog} ${nom}: il nome contiene cifre o simboli, da verificare`);
@@ -3500,7 +3528,7 @@ const MODELLI_EXCEL={
      consegnati.add(KEY(m.atletaId+'|'+m.articolo+'|'+(D.conNumero(m.articolo)?'':m.taglia)))}
    for(const [i,riga] of righe.entries()){
     const q=nr(i);
-    const sq=COL(riga,0).toUpperCase();const cog=COL(riga,1);const nom=COL(riga,2);
+    const sq=COL(riga,0).toUpperCase();const cog=conAccenti(COL(riga,1));const nom=conAccenti(COL(riga,2));
     const artScritto=COL(riga,3);
     if(!sq&&!cog&&!nom&&!artScritto){r.saltati++;continue}
     if(!sq||!cog||!nom||!artScritto){r.problemi.push(`${q}: ${quali([!sq&&'la squadra',!cog&&'il cognome',!nom&&'il nome',!artScritto&&'l\'articolo'])} ${[!sq,!cog,!nom,!artScritto].filter(Boolean).length===1?'manca':'mancano'}`);continue}
@@ -3846,10 +3874,13 @@ async function caricaModulo(){
       let meglio=null,quanti=0;
       for(const [sq,m] of Object.entries(perSquadra)){const n=nomi.filter(k=>m.has(k)).length;if(n>quanti){meglio=sq;quanti=n}}
       if(meglio&&quanti>=Math.max(2,Math.ceil(m0(nomi)/2))){squadra=meglio;avvisiModulo.push(`il foglio «${nomeFoglio}» non corrisponde a nessuna squadra, ma ${quanti} atleti su ${m0(nomi)} sono di ${teamLabel(meglio)}: letto come ${teamLabel(meglio)}`)}}
+    const i0=righe.findIndex(r=>r.some(c=>KEY(c)===KEY('Cognome')));
+    // Un foglio senza la riga dei titoli non e' una squadra (un foglio di note,
+    // come «Problemi da verificare» mandato alla societa'): si salta. Prima
+    // diventava una squadra nuova. E' un errore solo se ha il nome di una squadra.
+    if(i0<0){if(squadra)problemi.push(`foglio ${nomeFoglio}: non trovo la riga dei titoli`);continue}
     if(!squadra){squadra=String(nomeFoglio).trim().toUpperCase();squadreNuove.add(squadra)}
     fogliLetti.add(squadra);
-    const i0=righe.findIndex(r=>r.some(c=>KEY(c)===KEY('Cognome')));
-    if(i0<0){problemi.push(`foglio ${nomeFoglio}: non trovo la riga dei titoli`);continue}
     // Intestazione su due righe (sopra l'articolo, sotto Risposta e Taglia)
     // oppure su una sola, come nei moduli di prima ("Felpa", "Felpa taglia",
     // "Felpa taglia richiesta"): si leggono tutti e due.
@@ -4150,12 +4181,17 @@ async function eseguiModulo(D,daFare,prova){
       if(!aid&&d.ancheIn)esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome} risulta anche in ${teamLabel(d.ancheIn)}, che è ancora nel foglio: viene creata una seconda scheda (atleta in due squadre); se invece ha cambiato squadra, toglierla dal foglio di ${teamLabel(d.ancheIn)}`);
       if(!aid){
         if(prova)aid='NUOVO|'+k;
-        else{const nuovo=await S.db.collection('atlete').add({squadra:d.squadra,cognome:d.cognome,nome:d.nome,attiva:true,note:d.note||''});aid=nuovo.id}
+        else{const nuovo=await S.db.collection('atlete').add({squadra:d.squadra,cognome:conAccenti(d.cognome),nome:conAccenti(d.nome),attiva:true,note:d.note||''});aid=nuovo.id}
         perNome[k]=aid;esito.creati++;(esito.nomiCreati=esito.nomiCreati||[]).push(`${d.cognome} ${d.nome} (${teamLabel(d.squadra)})`);
       }else if(d.note&&!S.atlete[aid].note){
         if(!prova)await S.db.doc('atlete/'+aid).update({note:d.note});
       }
       const at=S.atlete[aid];
+      // Nel programma il nome ha l'apostrofo al posto dell'accento («Provato'»):
+      // si corregge, e lo si dice.
+      if(at&&(at.cognome!==conAccenti(at.cognome)||at.nome!==conAccenti(at.nome))){
+        if(!prova)await S.db.doc('atlete/'+aid).update({cognome:conAccenti(at.cognome),nome:conAccenti(at.nome)});
+        esito.avvisi.push(`${d.q}: nome corretto con l’accento: ${conAccenti(at.cognome)} ${conAccenti(at.nome)}`)}
       if(at&&(at.inUscita||at.attiva===false))esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome} è ${at.inUscita?'in attesa di riconsegna per l’eliminazione':'non attivo'}: le sue richieste non verranno servite`);
       for(const x of Object.values(d.articoli)){
         const r=modRisposta(x.risposta);
@@ -4232,28 +4268,33 @@ async function eseguiModulo(D,daFare,prova){
             esito.tolti+=via.length;(esito.nomiTolti=esito.nomiTolti||[]).push(`${d.cognome} ${d.nome}, ${artLabel(x.art.nome).toLowerCase()} (da ${corr.length} a ${x.n} pezzi)`);fatto=true}
           if(!fatto)esito.saltati++;
           continue}
-        if(corr.some(([,r])=>r.taglia===taglia)){esito.saltati++;continue}
+        // "da cambiare" su una divisa: quella che ha adesso torna disponibile.
+        // Vale anche quando la richiesta c'era gia' (uguale o di un'altra
+        // taglia): prima in quei casi la divisa vecchia restava in uso, e alla
+        // consegna della nuova non rientrava (caso visto dal vivo, 26/09/2026).
+        const segnaCambio=async()=>{
+          // torna vero se la divisa va segnata adesso: conta come dato nuovo
+          if(!(r==='cambia'&&conNum))return false;
+          // La divisa della squadra, non una maglia da libero: il modulo parla
+          // della divisa da gara.
+          const sue=Object.entries(S.divise).filter(([id,dv])=>dv.holder===aid&&!dv.dismessa&&stessoGenere(dv.modello,''));
+          const suo=d.numero?sue.find(([,dv])=>Number(dv.numero)===Number(d.numero)):(sue.length===1?sue[0]:null);
+          if(suo){if(suo[1].daRestituire)return false;if(!prova)await S.db.doc('divise/'+suo[0]).update({daRestituire:true});return true}
+          esito.avvisi.push(sue.length>1&&!d.numero
+            ?`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma ne ha più di una e il numero non è indicato: va segnata a mano`
+            :`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma non ne risulta nessuna${d.numero?' con il n.'+d.numero:''}`);return false};
+        if(corr.some(([,r])=>r.taglia===taglia)){if(await segnaCambio())esito.aggiornati++;else esito.saltati++;continue}
         if(corr.length){
           // stessa cosa, taglia diversa: la richiesta si corregge. Anche la
           // divisa: prima ne nasceva una seconda accanto alla vecchia.
           const [rid]=corr[0];if(!prova)await S.db.doc('richieste/'+rid).update({taglia});corr[0][1]={...corr[0][1],taglia};
           esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome}: la richiesta di ${artLabel(x.art.nome)} passa alla taglia ${taglia}`);
-          esito.aggiornati++;continue}
+          esito.aggiornati++;await segnaCambio();continue}
         const nuova={atletaId:aid,articolo:x.art.nome,taglia,modello:'',numeroDesiderato:null,note:'',ordine:Date.now()};
         const ref=prova?{id:'PROVA'}:await S.db.collection('richieste').add(nuova);
         (aperte[KEY(aid+'|'+x.art.nome)]=stesse).push([ref&&ref.id,nuova]);
         esito.aggiornati++;
-        // "da cambiare" su una divisa: quella che ha adesso torna disponibile
-        if(r==='cambia'&&conNum){
-          // La divisa della squadra, non una maglia da libero: il modulo parla
-          // della divisa da gara.
-          const sue=Object.entries(S.divise).filter(([id,dv])=>dv.holder===aid&&!dv.dismessa&&stessoGenere(dv.modello,''));
-          const suo=d.numero?sue.find(([,dv])=>Number(dv.numero)===Number(d.numero)):(sue.length===1?sue[0]:null);
-          if(suo){if(!suo[1].daRestituire&&!prova)await S.db.doc('divise/'+suo[0]).update({daRestituire:true})}
-          else esito.avvisi.push(sue.length>1&&!d.numero
-            ?`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma ne ha più di una e il numero non è indicato: va segnata a mano`
-            :`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma non ne risulta nessuna${d.numero?' con il n.'+d.numero:''}`);
-        }
+        await segnaCambio();
       }
     }
   }

@@ -267,6 +267,15 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   ok(suoi.length>=3,'i suoi movimenti restano nel registro con il nome scritto sopra');
   ok(!store.richieste.PROVA_USCITA,'e le sue richieste aperte spariscono');}
 
+ // --- le finestre delle divise usano le taglie dell'articolo della divisa ---
+ {const set=w.eval('S.settings');const i=set.articoli.findIndex(a=>a.nome===w.eval('artDivisa()'));
+  const prima=set.articoli[i].taglie;
+  store.settings.main={...store.settings.main,articoli:set.articoli.map((a,j)=>j===i?{...a,taglie:['12 anni',...(a.taglie||[])]}:a)};notify();await wait(200);
+  w.eval('dlgDivisa(null)');await wait(100);
+  ok([...w.document.querySelectorAll('#nTg option')].some(o=>o.textContent==='12 anni'),'«Aggiungi divisa» propone le taglie dell’articolo, anche quelle da bambino');
+  w.eval('closeDlg()');
+  store.settings.main={...store.settings.main,articoli:set.articoli.map((a,j)=>j===i?{...a,taglie:prima}:a)};notify();await wait(200);}
+
  // --- «Segna da cambiare» apre subito la richiesta della divisa nuova ---
  {const D0=w.eval('derive()');
   const did=Object.keys(store.divise).find(id=>{const d=store.divise[id];return d.holder&&!d.daRestituire&&!d.dismessa&&store.atlete[d.holder]

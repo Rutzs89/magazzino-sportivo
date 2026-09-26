@@ -424,6 +424,13 @@ const carica = async (tipo, righe) => {
     ok(w.eval(`Object.values(S.richieste).some(r=>r.atletaId===${JSON.stringify(aid)}&&r.articolo==='DIVISA GARA')`)
       && w.eval(`S.divise[${JSON.stringify(libera)}].daRestituire`) === true,
       "«da cambiare» su una divisa consegnata in questa stagione crea la richiesta e segna la vecchia da restituire");
+    // la richiesta c'e' gia' ma la divisa non e' segnata: ricaricando si segna
+    // (caso visto dal vivo il 26/09/2026: restava in uso e non sarebbe rientrata)
+    await w.eval(`S.db.doc('divise/'+${JSON.stringify(libera)}).update({daRestituire:false})`); await attendi(200);
+    modulo.daLeggere = [[f0.nome, [su, giu, rc]]];
+    await w.eval("caricaModulo()"); await attendi(900);
+    ok(w.eval(`S.divise[${JSON.stringify(libera)}].daRestituire`) === true,
+      "«da cambiare» con la richiesta già presente segna comunque la divisa vecchia da restituire");
   }
   }
 
@@ -749,6 +756,39 @@ const carica = async (tipo, righe) => {
     modulo.daLeggere = [[f5.nome, [...testa(f5), r5]], orig()]; await w.eval("caricaModulo()"); await attendi(1000);
     ok(w.eval(`(derive().dotazione[${JSON.stringify(aidC)}]||{})[${JSON.stringify(art + "|" + tg)}]`) === 2 && ((w.eval("S.app.esitoExcel") || {}).avvisi || []).some((x) => /ne risultano 2, nel foglio 1/.test(x)),
       "«ce l'ho» con 1 su chi ne ha 2: restano 2, con l'avviso del rientro da registrare");
+  }
+
+  /* 9n. un foglio in piu' senza titoli (le note per la societa') non diventa una squadra */
+  {
+    const sq0 = w.eval("S.settings.squadre.length");
+    modulo.daLeggere = [["Problemi da verificare", [["Squadra", "Atleta", "Tipo"], ["U12", "Provetta", "Taglia mancante"]]]];
+    await w.eval("caricaModulo()"); await attendi(600);
+    const e = w.eval("S.app.esitoExcel") || { problemi: [] };
+    ok(w.eval("S.settings.squadre.length") === sq0 && !e.problemi.some((x) => /Problemi da verificare/.test(x)),
+      "un foglio senza la riga dei titoli viene saltato: niente squadra nuova, niente errore");
+  }
+
+  /* 9o. accenti: «Provato'» e «Provatò» sono la stessa atleta, e il nome si corregge */
+  {
+    ok(w.eval("conAccenti(\"Provato'\")") === "Provatò" && w.eval("conAccenti('Esempiu’')") === "Esempiù" && w.eval("conAccenti(\"l'atleta\")") === "l'atleta" && w.eval("conAccenti(\"un po'\")") === "un po'" && w.eval("KEY(\"Provato'|Esempia\")") === w.eval("KEY('Provatò|Esempia')"),
+      "l'apostrofo a fine parola diventa accento, quello dell'elisione no");
+    await w.eval("scaricaModulo()"); await attendi(300);
+    const f = modulo.scritto.fogli.find((x) => !x.nascosto && x.righe.length);
+    const [id, a] = w.eval(`(()=>{const e=Object.entries(S.atlete).find(([k,x])=>x.squadra===${JSON.stringify(w.eval("derive().perServire").map(x=>x.nome).find(n=>n))}||true);return e})()`) ;
+    // un'atleta della prima squadra del foglio, col cognome scritto con l'apostrofo nell'archivio
+    const riga0 = f.righe[0];
+    const aid = w.eval(`Object.keys(S.atlete).find(k=>S.atlete[k].cognome===${JSON.stringify(riga0[0])}&&S.atlete[k].nome===${JSON.stringify(riga0[1])})`);
+    await w.eval(`S.db.doc('atlete/'+${JSON.stringify(aid)}).update({cognome:"Provetto'"})`); await attendi(200);
+    const testa = [f.intestazioni.map((t, k) => (!f.gruppi[k] ? t : k > 0 && f.gruppi[k - 1] === f.gruppi[k] ? "" : f.gruppi[k])), f.intestazioni.map((t, k) => (f.gruppi[k] ? t : ""))];
+    const r = [...riga0]; r[0] = "Provettò";
+    const kR = f.intestazioni.findIndex((t, j) => t === "Risposta" && f.intestazioni[j + 1] === "Taglia" && f.intestazioni[j + 2] === "Pezzi");
+    r[kR] = "mi manca"; r[kR + 1] = w.eval(`articoloDaNome(derive(),${JSON.stringify(f.gruppi[kR])}).taglie[0]`); r[kR + 2] = "";
+    const nAt = Object.keys(w.eval("S.atlete")).length;
+    modulo.daLeggere = [[f.nome, [...testa, r]]];
+    await w.eval("caricaModulo()"); await attendi(900);
+    ok(Object.keys(w.eval("S.atlete")).length === nAt && w.eval(`S.atlete[${JSON.stringify(aid)}].cognome`) === "Provettò",
+      "«Provettò» nel foglio è la stessa atleta di «Provetto'» nell'archivio: niente scheda doppia, e il nome si corregge");
+    await w.eval(`S.db.doc('atlete/'+${JSON.stringify(aid)}).update({cognome:${JSON.stringify(riga0[0])}})`); await attendi(200);
   }
 
   /* 9g. divisa dismessa: si annulla da Movimenti */
