@@ -834,9 +834,9 @@ function derive(){
       if(a.persona){
         const altre=Object.keys(S.atlete).filter(x=>x!==r.atletaId&&S.atlete[x].persona===a.persona);
         const gia=altre.find(x=>Object.entries(dotazione[x]||{}).some(([kk,v])=>v>0&&kk.split('|')[0]===r.articolo));
-        if(gia){prop[rid]={esito:'ESCLUSA',motivo:`Già consegnato con la scheda di ${teamLabel(S.atlete[gia].squadra)}`};continue}
+        if(gia){prop[rid]={esito:'ESCLUSA',altra:true,motivo:`Già consegnato con la scheda di ${teamLabel(S.atlete[gia].squadra)}`};continue}
         const kp=a.persona+'|'+r.articolo;
-        if(perPersona[kp]){prop[rid]={esito:'ESCLUSA',motivo:`Lo riceve con la scheda di ${teamLabel(perPersona[kp])}`};continue}
+        if(perPersona[kp]){prop[rid]={esito:'ESCLUSA',altra:true,motivo:`Lo riceve con la scheda di ${teamLabel(perPersona[kp])}`};continue}
         perPersona[kp]=a.squadra;
       }
       const k=key(r.articolo,r.taglia);const disp=stock[k]?stock[k].ora:0;const u=usedMat[k]||0;
@@ -994,7 +994,7 @@ function chip(d,extra,asBtn,id){
   return asBtn?`<button type="button" class="${c.join(' ')}" data-act="divisa" data-id="${esc(id)}" aria-label="${esc(t)}"><b>${esc(d.numero)}</b><small>${esc(d.taglia)}</small></button>`
     :`<span class="${c.join(' ')}" title="${esc(t)}"><b>${esc(d.numero)}</b><small>${esc(d.taglia)}</small></span>`;
 }
-const esitoPill=p=>!p?'':p.esito==='OK'?'<span class="pill ok">Pronta</span>':p.esito==='MANCA'?'<span class="pill bad">Da ordinare</span>':'<span class="pill">Esclusa</span>';
+const esitoPill=p=>!p?'':p.esito==='OK'?'<span class="pill ok">Pronta</span>':p.esito==='MANCA'?'<span class="pill bad">Da ordinare</span>':p.altra?'<span class="pill">Altra squadra</span>':'<span class="pill">Esclusa</span>';
 function teamOptions(sel,withAll){const D=derive();return (withAll?`<option value="">${withAll}</option>`:'')+D.perServire.map(s=>`<option value="${esc(s.nome)}"${s.nome===sel?' selected':''}>${esc(teamLabel(s.nome))}</option>`).join('')}
 
 /* ---- Atlete ---- */
@@ -1119,12 +1119,12 @@ function vAtleta(id){
   <button type="button" class="btn" data-act="editAtleta" data-id="${esc(id)}">Modifica atleta</button>
   <button type="button" class="btn ghost danger" data-act="eliminaAtl" data-id="${esc(id)}">Elimina atleta…</button></div>`;
   h+=legenda(`<p>La scheda riporta le divise e il materiale in possesso dell'atleta e le sue richieste aperte. <b>Consegna diretta</b> registra una consegna senza passare da una richiesta; <b>Nuova richiesta</b> aggiunge una richiesta; <b>Modifica atleta</b> consente di cambiare i dati, la squadra, il collegamento con la scheda di un'altra squadra e di eliminare l'atleta.</p>
-    <p>Su ogni divisa, <b>Segna da cambiare</b> la indica come da sostituire e <b>Restituita</b> ne registra il rientro; sul materiale, <b>Restituito</b> registra il rientro dei pezzi.</p>`,vociDivise(true));
+    <p>Su ogni divisa, <b>Modifica</b> corregge taglia, numero e lotto (per esempio se risultava una M e in realtà è una S), <b>Segna da cambiare</b> la indica come da sostituire e <b>Restituita</b> ne registra il rientro; sul materiale, <b>Restituito</b> registra il rientro dei pezzi.</p>`,vociDivise(true));
   h+=`<h2>Divise</h2>`;
   if(!divs.length)h+=`<div class="list"><p class="empty">Nessuna divisa assegnata. Si assegna con una nuova richiesta oppure con la consegna diretta.</p></div>`;
   else h+=`<div class="list">`+divs.map(([did,d])=>`<div class="item">${chip(d,'big')}<div class="main"><div class="name">${esc(nomeLotto(d.modello))}</div>
     <div class="meta">${d.daRestituire?'Da cambiare: deve essere restituita alla consegna della nuova':'In uso'}${d.tagliaChiesta?` · <b>taglia ${esc(d.taglia)}</b>, ne aveva chiesta una ${esc(d.tagliaChiesta)}`:''}${d.note?' · '+esc(d.note):''}</div></div>
-    <div class="right"><button type="button" class="btn small" data-act="toggleDR" data-id="${esc(did)}">${d.daRestituire?'Non la cambia più':'Segna da cambiare'}</button>
+    <div class="right"><button type="button" class="btn small" data-act="divisa" data-id="${esc(did)}">Modifica</button><button type="button" class="btn small" data-act="toggleDR" data-id="${esc(did)}">${d.daRestituire?'Non la cambia più':'Segna da cambiare'}</button>
     <button type="button" class="btn small" data-act="rientroDivisa" data-id="${esc(did)}">Restituita</button></div></div>`).join('')+`</div>`;
   h+=`<h2>Richieste aperte</h2>`;
   if(!req.length)h+=`<div class="list"><p class="empty">Nessuna richiesta aperta.</p></div>`;
@@ -1205,11 +1205,12 @@ function vAssegnazioni(){
     <p><b>Consegna</b> registra la consegna del capo proposto. Se la taglia richiesta non è disponibile, <b>Altra taglia</b> consente di consegnarne una diversa, anche in via provvisoria. Le richieste si caricano da Excel (Impostazioni) oppure si inseriscono dalla scheda dell'atleta.</p>`,
     [['<span class="pill ok">pronta</span>','disponibile, pronta per la consegna'],
     ['<span class="pill bad">da ordinare</span>','giacenza insufficiente: il capo va ordinato'],
-    ['<span class="pill">esclusa</span>','squadra o articolo fuori distribuzione']])+`
+    ['<span class="pill">esclusa</span>','squadra o articolo fuori distribuzione, atleta non attivo o in eliminazione'],
+    ['<span class="pill">altra squadra</span>','atleta in due squadre: lo riceve una volta sola, con l’altra scheda']])+`
   <div class="filters">
     <input type="search" id="qAss" placeholder="Cerca atleta" value="${esc(S.ui.aQ)}" data-bind="aQ" autocomplete="off">
     <select id="f_aTeam" data-bind="aTeam" aria-label="Squadra">${teamOptions(S.ui.aTeam,'Tutte le squadre')}</select>
-    <select id="f_aEsito" data-bind="aEsito" aria-label="Esito"><option value="">Tutti gli esiti</option>${[['OK','Pronte'],['MANCA','Da ordinare'],['ESCLUSA','Escluse']].map(([v,l])=>`<option value="${v}"${S.ui.aEsito===v?' selected':''}>${l}</option>`).join('')}</select>
+    <select id="f_aEsito" data-bind="aEsito" aria-label="Esito"><option value="">Tutti gli esiti</option>${[['OK','Pronte'],['MANCA','Da ordinare'],['ESCLUSA','Escluse o altra squadra']].map(([v,l])=>`<option value="${v}"${S.ui.aEsito===v?' selected':''}>${l}</option>`).join('')}</select>
     <select id="f_aArt" data-bind="aArt" aria-label="Articolo"><option value="">Tutti gli articoli</option>${arts.map(a=>`<option value="${esc(a)}"${S.ui.aArt===a?' selected':''}>${esc(artLabel(a))}</option>`).join('')}</select>
     <input type="text" id="f_nAss" class="filtroNum" maxlength="2" pattern="[0-9]*" placeholder="n. maglia" value="${esc(S.ui.nAss)}" data-bind="nAss" aria-label="Numero di maglia" inputmode="numeric">`;
   const nOk=ids.filter(rid=>D.prop[rid].esito==='OK').length;
@@ -1748,7 +1749,7 @@ function vManuale(){
     <p>3. <b>Consegna o ritira a tutti</b> — dalla riga della squadra, per il solo materiale: una taglia per tutti, con la possibilità di escludere chi possiede già l'articolo. La stessa finestra consente il ritiro dall'intera squadra, senza superare quanto consegnato a ciascuno.</p>
     <p>4. <b>Consegna a staff ed esterni</b> — in Movimenti, per il materiale dato ad allenatori, dirigenti o esterni, indicandone nome e ruolo.</p>
     <p>Gli atleti con l’eliminazione in attesa di riconsegna e quelli non attivi non ricevono consegne. Se la taglia richiesta non è disponibile, sulla richiesta compare <b>Altra taglia</b>: elenca le maglie disponibili a partire dalle taglie più vicine, con i soli numeri liberi nella squadra, e consente una consegna provvisoria.</p>
-    <p>I rientri si registrano dalla scheda dell'atleta con <b>Restituita</b> (divise) o <b>Restituito</b> (materiale), oppure con il ritiro da tutta la squadra o con «consegnato» nel modulo per le divise da cambiare. <b>Segna da cambiare</b> indica una divisa come da sostituire.</p>`)}
+    <p>I rientri si registrano dalla scheda dell'atleta con <b>Restituita</b> (divise) o <b>Restituito</b> (materiale), oppure con il ritiro da tutta la squadra o con «consegnato» nel modulo per le divise da cambiare. <b>Segna da cambiare</b> indica una divisa come da sostituire. <b>Modifica</b>, sulla divisa nella scheda dell'atleta, ne corregge taglia, numero e lotto; se la divisa giusta è già in magazzino, le due si scambiano e quella segnata per errore torna in magazzino.</p>`)}
 
   ${sezione('Annullare un movimento',`
     <p>In Movimenti, <b>Annulla</b> rimette il magazzino nella situazione precedente. Una consegna con il ritiro della maglia vecchia si annulla per intero, e la richiesta consegnata torna aperta; l'annullamento di un carico rimette tra gli ordinati i pezzi che aveva scalato.</p>
@@ -2088,7 +2089,8 @@ function problemiDivise(){
    subito anche "Eliminare... non reversibile" (analisi del 25/09/2026). */
 function chiedi(testo,op){
   op=op||{};
-  if(window.__rispostaConferme!==undefined)return Promise.resolve(!!window.__rispostaConferme);
+  // nelle prove la risposta puo' anche dipendere dalla domanda (una funzione)
+  if(window.__rispostaConferme!==undefined)return Promise.resolve(!!(typeof window.__rispostaConferme==='function'?window.__rispostaConferme(testo):window.__rispostaConferme));
   if(!window.__APP)return Promise.resolve(window.confirm(testo));
   return new Promise(risposta=>{
     const d=$('#dlgConf');$('#confTesto').textContent=testo;d.returnValue='';
@@ -2684,9 +2686,27 @@ function dlgDivisa(id){
             &&S.atlete[y.holder]&&stessaSerie(derive(),S.atlete[y.holder].squadra,a.squadra)&&Number(y.numero)===num);
           if(gia){toast(`Il numero ${num} è già assegnato a un altro atleta in ${teamLabel(a.squadra)}`);return false}
         }
-        const dup=Object.entries(S.divise).some(([x,y])=>x!==id&&!y.dismessa&&y.taglia===tg
+        const dups=Object.entries(S.divise).filter(([x,y])=>x!==id&&!y.dismessa&&y.taglia===tg
           &&Number(y.numero)===num&&(y.modello||'STANDARD')===mod);
-        if(dup&&!await chiedi(`Esiste già una divisa ${tg} n.${num} di questo lotto. Salvare comunque?`))return false;
+        const dup=dups.length>0;
+        // Correzione dalla scheda dell'atleta (Andrea, 26/09/2026: «mi avevano
+        // detto 8 M, poi scopro che era una S»): se quella divisa esiste gia' ed
+        // e' in magazzino, non se ne crea un doppione: si scambiano. L'atleta
+        // prende quella giusta, quella segnata per errore torna in magazzino.
+        const libera=d.holder&&dups.find(([,y])=>!y.holder);
+        if(libera){
+          const [lid,ld]=libera;const chi=S.atlete[d.holder];
+          // Puo' anche darsi che le maglie uguali siano davvero due (Andrea):
+          // rispondendo no si passa alla domanda di sotto, che la salva accanto.
+          if(await chiedi(`In magazzino c’è già una divisa ${tg} n.${num} di questo lotto. Se è quella che ha ${fullName(chi)}, si scambiano: la prende lei e la ${d.taglia} n.${d.numero} torna in magazzino. Se invece le ${tg} n.${num} sono davvero due, premere Annulla.`,{si:'Scambia'})){
+          const nota=`Correzione: aveva la ${tg} n.${num}, non la ${d.taglia} n.${d.numero}`;
+          const ok=await w(()=>insieme(async()=>{
+            await S.db.doc('divise/'+id).update({holder:null,daRestituire:false,tagliaChiesta:null,note:fd.note||''});
+            await mov({tipo:'RIENTRO',atletaId:d.holder,articolo:artDivisa(),taglia:d.taglia,divisaId:id,numero:d.numero,prevHolder:d.holder,prevDR:!!d.daRestituire,prevTC:d.tagliaChiesta||null,note:nota});
+            await S.db.doc('divise/'+lid).update({holder:d.holder,daRestituire:!!d.daRestituire});
+            await mov({tipo:'CONSEGNA',atletaId:d.holder,articolo:artDivisa(),taglia:tg,divisaId:lid,numero:num,prevHolder:null,prevDR:!!ld.daRestituire,note:nota})}));
+          if(ok)toast(`Corretto: ${fullName(chi)} ha la ${tg} n.${num}`);return ok}}
+        if(dup&&!await chiedi(`Esiste già una divisa ${tg} n.${num} di questo lotto. Salvare comunque? Risulteranno due divise uguali.`,{si:'Salva comunque'}))return false;
       }
       const ok=await w(()=>S.db.doc('divise/'+id).update({taglia:tg,numero:num,modello:mod,note:fd.note||''}));
       if(ok)toast(cambia?`Divisa corretta: ${tg} n.${num} · ${cap(mod)}`:'Nota salvata');return ok});return}

@@ -791,6 +791,33 @@ const carica = async (tipo, righe) => {
     await w.eval(`S.db.doc('atlete/'+${JSON.stringify(aid)}).update({cognome:${JSON.stringify(riga0[0])}})`); await attendi(200);
   }
 
+  /* 9p. dalla scheda si corregge la divisa: «era una S, non una M». Se quella
+     giusta e' in magazzino si scambiano, senza doppioni */
+  {
+    const [id, d] = w.eval("Object.entries(S.divise).find(([k,x])=>x.holder&&!x.daRestituire&&!x.dismessa&&S.atlete[x.holder])");
+    const t2 = w.eval(`taglieDivisa().find(t=>t!==${JSON.stringify(d.taglia)})`);
+    const nuova = await w.eval(`S.db.collection('divise').add({taglia:${JSON.stringify(t2)},numero:${d.numero},modello:${JSON.stringify(d.modello || "STANDARD")},holder:null,daRestituire:false,note:''})`);
+    await attendi(200);
+    const lid = nuova.id;
+    w.eval(`dlgDivisa(${JSON.stringify(id)})`); await attendi(100);
+    w.document.querySelector("#dTg").value = t2;
+    w.document.querySelector('#dlgForm button[value="ok"], #dlgForm button[type="submit"]:not([value])') ? w.document.querySelector('#dlgForm button[value="ok"], #dlgForm button[type="submit"]:not([value])').click() : w.document.querySelector("#dlgForm").requestSubmit();
+    await attendi(500);
+    ok(w.eval(`S.divise[${JSON.stringify(lid)}].holder`) === d.holder && w.eval(`S.divise[${JSON.stringify(id)}].holder`) === null
+      && w.eval(`S.divise[${JSON.stringify(id)}].taglia`) === d.taglia,
+      "correggendo la taglia dalla scheda, la divisa giusta in magazzino passa all'atleta e quella sbagliata torna in magazzino");
+    // le maglie uguali sono davvero due: niente scambio, si salva accanto
+    const prima = w.eval("window.__rispostaConferme");
+    w.eval("window.__rispostaConferme = t => !/si scambiano/.test(t)");
+    w.eval(`dlgDivisa(${JSON.stringify(lid)})`); await attendi(100);
+    w.document.querySelector("#dTg").value = d.taglia;
+    w.document.querySelector("#dlgForm").requestSubmit(); await attendi(500);
+    w.eval(`window.__rispostaConferme = ${JSON.stringify(prima)}`);
+    ok(w.eval(`S.divise[${JSON.stringify(lid)}].holder`) === d.holder && w.eval(`S.divise[${JSON.stringify(lid)}].taglia`) === d.taglia
+      && w.eval(`S.divise[${JSON.stringify(id)}].holder`) === null,
+      "se le maglie uguali sono davvero due, rispondendo no allo scambio la correzione si salva lo stesso");
+  }
+
   /* 9g. divisa dismessa: si annulla da Movimenti */
   {
     const id = w.eval("Object.keys(S.divise).find(k=>!S.divise[k].holder&&!S.divise[k].dismessa)");
