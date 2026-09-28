@@ -47,6 +47,7 @@ let salvataggioRotto = false; // disco pieno, antivirus: il salvataggio fallisce
 let copieRotte = false; // la cartella delle copie non si puo' scrivere
 const copiePrima = []; // le copie fatte prima di un ripristino
 const passi = []; // l'ordine dei passi dell'aggiornamento
+let versioneNuova = null; // quella che la finta ricerca degli aggiornamenti trova
 const invoke = async (nome, arg) => {
   switch (nome) {
     case "carica_dati":
@@ -75,6 +76,8 @@ const invoke = async (nome, arg) => {
       return "C:\finto\copie\prima-di-riprendere.json";
     case "annulla_uscita":
       return null;
+    case "cerca_aggiornamento":
+      return versioneNuova;
     case "scarica_aggiornamento":
       passi.push("scarica");
       return null;
@@ -326,6 +329,37 @@ const ok = (c, m) => {
   }
   salvataggioRotto = false;
   ok(fermato2 && !passi.includes("installa"), "se i dati non si salvano, l'aggiornamento non si installa");
+
+  /* 9. all'apertura una finestra propone la versione nuova */
+  passi.length = 0;
+  versioneNuova = "9.9.9";
+  const domande = [];
+  w.__rispostaConferme = (t) => (domande.push(t), false);
+  w.location.hash = "#assegnazioni";
+  await w.offriAggiornamento();
+  ok(domande.length === 1 && domande[0].includes("9.9.9") && passi.length === 0 && w.eval("S.app.nuovaVersione") === "9.9.9",
+    "all'apertura si chiede se installare la versione nuova; con «Più tardi» non si installa niente");
+  ok(w.document.body.innerHTML.includes("Installa la versione 9.9.9") || (w.location.hash = "#impostazioni", await attendi(50), w.document.body.innerHTML.includes("Installa la versione 9.9.9")),
+    "e la versione resta installabile da Impostazioni");
+  w.location.hash = "#assegnazioni";
+  w.__rispostaConferme = true;
+  await w.offriAggiornamento();
+  ok(passi.join(",") === "scarica,installa" && w.location.hash === "#impostazioni",
+    "con «Installa ora» si passa a Impostazioni (dove si vede l'avanzamento) e si installa");
+  // con una finestra gia' aperta non se ne apre un'altra sopra
+  passi.length = 0;
+  domande.length = 0;
+  w.__rispostaConferme = (t) => (domande.push(t), true);
+  w.eval("S.app.installando=false");
+  w.document.getElementById("dlg").open = true;
+  await w.offriAggiornamento();
+  w.document.getElementById("dlg").open = false;
+  ok(domande.length === 0 && passi.length === 0, "se è aperta un'altra finestra, niente domanda sopra: resta l'avviso");
+  versioneNuova = null;
+  domande.length = 0;
+  await w.offriAggiornamento();
+  ok(domande.length === 0, "senza versione nuova non compare niente");
+  w.__rispostaConferme = true;
 
   ok(errs.length === 0, "nessun errore JavaScript " + errs.join("; "));
   process.exit(falliti ? 1 : 0);

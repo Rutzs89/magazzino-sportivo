@@ -1778,7 +1778,7 @@ function vManuale(){
     <p>I dati sono conservati <b>su questo computer</b>, in un file locale: non vengono trasmessi in rete e non richiedono un account. Il programma si apre una sola volta: aprendolo di nuovo si torna alla finestra già aperta.</p>
     <p>In ogni giornata di utilizzo il programma salva automaticamente una copia dell'archivio com'era prima della prima modifica del giorno e conserva le ultime 30; prima di ogni ripristino salva anche una copia dei dati del momento. In <b>Impostazioni → Copie di sicurezza</b> le copie automatiche si riprendono direttamente dall'elenco; è inoltre possibile salvare una copia in una posizione a scelta, riprendere i dati da un file e scegliere la cartella delle copie automatiche.</p>
     <p>Se alla chiusura le ultime modifiche non risultano salvate, il programma lo segnala e chiede se chiudere comunque.</p>
-    <p>Pochi secondi dopo l'avvio il programma verifica la disponibilità di una nuova versione e, se presente, lo segnala. L'installazione si avvia da <b>Impostazioni → Aggiornamenti</b>: il programma scarica la versione nuova mostrando l'avanzamento, salva i dati, la installa e si riapre automaticamente. I dati non vengono modificati.</p>
+    <p>Pochi secondi dopo l'avvio il programma verifica la disponibilità di una nuova versione e, se presente, propone di installarla: <b>Installa ora</b> procede subito, <b>Più tardi</b> rimanda alla prossima apertura. L'installazione si può avviare anche da <b>Impostazioni → Aggiornamenti</b>: il programma scarica la versione nuova mostrando l'avanzamento, salva i dati, la installa e si riapre automaticamente. I dati non vengono modificati.</p>
     <p>L'aspetto segue il tema del computer, chiaro o scuro; in <b>Impostazioni → Come si vede</b> è possibile sceglierlo manualmente.</p>`)}
 
   ${sezione('Articoli in distribuzione',
@@ -2095,7 +2095,7 @@ function chiedi(testo,op){
   return new Promise(risposta=>{
     const d=$('#dlgConf');$('#confTesto').textContent=testo;d.returnValue='';
     const si=d.querySelector('button[value="si"]'),no=d.querySelector('button[value="no"]');
-    si.textContent=op.si||'Conferma';si.className='btn '+(op.pericolo?'danger pieno':'primary');no.hidden=false;
+    si.textContent=op.si||'Conferma';si.className='btn '+(op.pericolo?'danger pieno':'primary');no.hidden=false;no.textContent=op.no||'Annulla';
     const chiuso=()=>{d.removeEventListener('close',chiuso);risposta(d.returnValue==='si')};
     d.addEventListener('close',chiuso);d.showModal();(op.pericolo?no:si).focus()});
 }
@@ -3046,9 +3046,16 @@ document.addEventListener('click',async e=>{
         toast(v?`\u00c8 disponibile la versione ${v}`:'Il programma \u00e8 gi\u00e0 aggiornato all\u2019ultima versione')}
       catch(e){toast('Verifica non riuscita: '+e)}
       S.app.cercando=false;render();return}
-    case'installaAgg':{
+    case'installaAgg':
       if(!await chiedi(`Installare la versione ${S.app.nuovaVersione}?
 Il programma salva i dati, si chiude e si riapre automaticamente. I dati non vengono modificati.`))return;
+      return installaNuovaVersione();
+    case'resetProva':if(window.__PROVA&&await chiedi('Cancellare tutte le prove e tornare ai dati iniziali?'))window.__PROVA.reset();return;
+  }
+});
+
+/* Scarica e installa la versione nuova, gia' confermata. */
+async function installaNuovaVersione(){
       // La barra si muove chiedendo ogni tanto al programma a che punto e':
       // sono sette megabyte, e venti secondi di schermo fermo sembrano un
       // blocco. Si chiede invece di ricevere un evento perche' gli eventi
@@ -3064,10 +3071,26 @@ Il programma salva i dati, si chiude e si riapre automaticamente. I dati non ven
       catch(e){clearInterval(battito);S.app.installando=false;render();
         toast('Installazione non riuscita: '+e);return}
       clearInterval(battito);S.app.percento=100;render();
-      return}
-    case'resetProva':if(window.__PROVA&&await chiedi('Cancellare tutte le prove e tornare ai dati iniziali?'))window.__PROVA.reset();return;
-  }
-});
+}
+
+/* All'apertura: se c'e' una versione nuova lo si chiede subito con una
+   finestra (Andrea: l'avviso in basso passava inosservato). "Piu' tardi"
+   lascia il pulsante in Impostazioni e la domanda torna alla prossima
+   apertura. Una finestra gia' aperta (una modifica in corso) non si copre:
+   in quel caso resta l'avviso in basso. */
+async function offriAggiornamento(){
+  let v;
+  try{v=await window.__APP.cercaAggiornamento()}catch(e){return}
+  if(!v)return;
+  S.app.nuovaVersione=v;render();
+  if(S.busy||S.app.installando||document.querySelector('dialog[open]')){toast(`È disponibile la versione ${v}: si installa da Impostazioni`);return}
+  const ora=window.__APP.versione();
+  if(!await chiedi(`È disponibile una nuova versione del programma: ${v}${ora?` (versione installata: ${ora})`:''}.
+Installarla ora? Il programma salva i dati, si chiude e si riapre automaticamente. I dati non vengono modificati.`,{si:'Installa ora',no:'Più tardi'})){
+    toast('La nuova versione si può installare in seguito da Impostazioni → Aggiornamenti');return}
+  location.hash='#impostazioni';
+  await installaNuovaVersione();
+}
 
 
 /* ============ modelli Excel ============
@@ -4585,11 +4608,9 @@ async function boot(){
     setTimeout(assegnaCodiciMancanti,0)},onErr);
   for(const c of COLS)db.collection(c).onSnapshot(q=>{const m={};for(const d of q.docs)m[d.id]=d.data();S[c]=m;S.loaded.add(c);changed()},onErr);
   window.claude.use('downloads').then(d=>{S.dl=d}).catch(()=>{});
-  // Qualche secondo dopo l'avvio, senza disturbare: se c'è una versione nuova
-  // compare l'avviso, se non c'è non succede niente.
-  if(window.__APP)setTimeout(()=>{window.__APP.cercaAggiornamento()
-    .then(v=>{if(v){S.app.nuovaVersione=v;toast(`È disponibile la versione ${v}: si installa da Impostazioni`);render()}})
-    .catch(()=>{})},4000);
+  // Poco dopo l'avvio: se c'è una versione nuova si propone di installarla,
+  // se non c'è non succede niente.
+  if(window.__APP)setTimeout(offriAggiornamento,2500);
 }
 boot();
 </script>
