@@ -1733,7 +1733,8 @@ function vManuale(){
     <p><b>Assegnazioni</b> — due schede. <i>Richieste</i>: le richieste aperte, raggruppate per squadra, con il capo proposto dal programma e i filtri per squadra, esito, articolo e numero. <i>Da ordinare</i>: i pezzi da ordinare al fornitore, per articolo e taglia, al netto di quelli già ordinati.</p>
     <p><b>Magazzino</b> — due schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo, <b>Aggiungi lotto</b> e <b>Modifica lotto</b> gestiscono i lotti e le squadre che li usano. Selezionando una maglia in magazzino, <b>Segna fuori uso</b> la lascia in magazzino (grigia e barrata) senza che venga mai assegnata, <b>Dismetti</b> la toglie definitivamente dal magazzino. <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − mancanti + ordinati). Selezionando una riga si apre la finestra dell'articolo: in cima si sceglie <b>Arrivo</b>, <b>Inventario</b>, <b>Dismessi</b> oppure <b>Ordine</b>, e sotto compaiono solo le caselle che servono, con un solo pulsante. Eventuali incongruenze sono segnalate in cima alla scheda.</p>
     <p><b>Movimenti</b> — il registro di consegne, rientri, carichi e rettifiche, dal più recente; vengono mostrati gli ultimi 150, con il pulsante per visualizzarli tutti. <b>Consegna a staff ed esterni</b> registra il materiale dato ad allenatori, dirigenti o esterni.</p>
-    <p><b>Impostazioni</b> — stagione in corso, nome e stemma della società, fogli Excel (scaricare e caricare i dati, scaricare i movimenti), codici degli articoli, aspetto (chiaro, scuro o come il computer), aggiornamenti e copie di sicurezza. Le funzioni che lavorano con i file sono disponibili nel programma installato.</p>`)}
+    <p><b>Avviso di scorta bassa</b> — aggiungendo una richiesta o consegnando un articolo, il programma avvisa se in magazzino non ce n’è oppure se di quell’articolo, in quella taglia, ne restano da assegnare meno della soglia scelta in Impostazioni (5 se non indicata). Il conto toglie quanto è già prenotato per altre richieste e quanto risulta già da ordinare.</p>
+    <p><b>Impostazioni</b> — stagione in corso, soglia della scorta bassa, nome e stemma della società, fogli Excel (scaricare e caricare i dati, scaricare i movimenti), codici degli articoli, aspetto (chiaro, scuro o come il computer), aggiornamenti e copie di sicurezza. Le funzioni che lavorano con i file sono disponibili nel programma installato.</p>`)}
 
   ${sezione('La regola dei numeri',`
     <p>All'interno di una squadra <b>un numero di maglia non può ripetersi</b>. Tra squadre diverse lo stesso numero è invece ammesso.</p>
@@ -1862,6 +1863,7 @@ function dlgTuttaSquadra(nome){
     });
     if(ok)toast(`${dentro.length} ${dentro.length===1?'movimento':'movimenti'} ${fd.azione==='CONSEGNA'?'di consegna':'di rientro'} registrati`
       +(chiuse?`, ${chiuse===1?'una richiesta chiusa':chiuse+' richieste chiuse'}`:''));
+    if(ok&&fd.azione==='CONSEGNA')controllaScorta({art,tg});
     return ok});
 
   const agg=()=>{const n=$('#tArt').value;const t=taglieDi(n);
@@ -1947,6 +1949,8 @@ function vImpostazioni(){
   <h2>Stagione</h2><p class="sub">A fine stagione, <b>Chiudi la stagione</b> apre la successiva: salva prima una copia, chiede che cosa fare delle richieste aperte e porta con sé gli articoli ancora in distribuzione. Il campo qui sotto serve solo a correggere il nome della stagione in corso.</p>
   <div class="row-actions"><button type="button" class="btn primary" data-act="chiudiStagione">Chiudi la stagione ${esc(D.set.stagione||'')}…</button></div>
   <div class="filters corti"><input type="text" id="stag" value="${esc(D.set.stagione)}" aria-label="Stagione"><button type="button" class="btn" data-act="saveStag">Correggi il nome</button></div>
+  <h2>Avviso di scorta bassa</h2><p class="sub">Quando si aggiunge una richiesta o si consegna un articolo, il programma avvisa se in magazzino non ce n’è oppure se di quell’articolo, in quella taglia, ne restano da assegnare meno di questo numero. Con 0 avvisa solo quando non ce n’è più.</p>
+  <div class="filters corti"><input type="number" id="soglia" min="0" max="999" inputmode="numeric" value="${esc(sogliaScorta(D))}" aria-label="Soglia di avviso"><button type="button" class="btn" data-act="saveSoglia">Salva soglia</button></div>
   <h2>Società</h2><p class="sub">Il nome e lo stemma compaiono in alto, accanto a «Magazzino», e il nome anche nel titolo della finestra. Sono salvati nell’archivio: il programma non appartiene a una società in particolare.</p>
   <div class="filters corti"><input type="text" id="soc" value="${esc(D.set.societa||'')}" placeholder="Nome della società" aria-label="Nome della società"><button type="button" class="btn" data-act="saveSoc">Salva nome</button></div>
   <div class="row-actions" style="margin-top:8px"><button type="button" class="btn" data-act="scegliLogo">${D.set.logo?'Cambia stemma…':'Carica lo stemma…'}</button>${D.set.logo?`<button type="button" class="btn ghost" data-act="togliLogo">Togli lo stemma</button>`:''}</div>
@@ -2099,6 +2103,62 @@ function chiedi(testo,op){
     const chiuso=()=>{d.removeEventListener('close',chiuso);risposta(d.returnValue==='si')};
     d.addEventListener('close',chiuso);d.showModal();(op.pericolo?no:si).focus()});
 }
+/* Avviso di scorta (Andrea, 03/10/2026: "un alert quando assegno qualcosa che a
+   magazzino non c'e', o se assegnando si scende sotto una soglia, tipo 5").
+   Il numero che conta e' quello che resta davvero da dare: in magazzino, meno
+   quello gia' promesso ad altre richieste, meno le richieste che gia' oggi
+   restano da ordinare. Per le divise si contano le maglie assegnabili del lotto
+   di quella squadra, in quella taglia. La soglia e' un'impostazione. */
+const SOGLIA_BASE=5;
+const sogliaScorta=D=>{const v=Number(D.set.sogliaScorta);return D.set.sogliaScorta!=null&&D.set.sogliaScorta!==''&&Number.isFinite(v)&&v>=0?v:SOGLIA_BASE};
+function restoScorta(D,art,tg,aid,modello,lottoDato){
+  const tgL=tg==='UNICA'?'taglia unica':'taglia '+tg;
+  if(D.conNumero(art)){
+    const lotto=lottoDato||D.modelloPer({atletaId:aid,modello:modello||''});
+    const libere=Object.entries(S.divise).filter(([id,d])=>!d.dismessa&&!d.fuoriUso&&(d.modello||'STANDARD')===lotto
+      &&d.taglia===tg&&(!d.holder||d.daRestituire)&&!D.prenDivisa[id]).length;
+    const mancano=Object.entries(D.prop).filter(([rid,p])=>p.esito==='MANCA'&&S.richieste[rid]
+      &&D.conNumero(S.richieste[rid].articolo)&&S.richieste[rid].taglia===tg&&D.modelloPer(S.richieste[rid])===lotto).length;
+    return {n:libere-mancano,cosa:`${artLabel(art)} (${nomeLotto(lotto)}) ${tgL}`}}
+  const k=D.key(art,tg);const q=D.stock[k]||{ora:0,ordinati:0};
+  const mancano=Object.entries(D.prop).filter(([rid,p])=>p.esito==='MANCA'&&S.richieste[rid]
+    &&S.richieste[rid].articolo===art&&S.richieste[rid].taglia===tg).length;
+  return {n:q.ora-(D.prenMat[k]||0)-mancano,ord:q.ordinati||0,cosa:`${artLabel(art)} ${tgL}`}}
+/* Al caricamento del foglio niente finestre una per articolo (Andrea, 03/10:
+   "quando carichiamo come potremmo fare?"): il giro di prova tiene il conto di
+   quanto ogni articolo e taglia cambia (una richiesta nuova o una consegna senza
+   richiesta = -1, una richiesta tolta = +1), e il riepilogo prima di «Carica»
+   elenca quelli che finirebbero sotto la soglia. Lo stesso elenco resta
+   nell'esito. Conto fatto sullo stato di prima: va calcolato dal giro di prova. */
+function contaScorta(esito,art,tg,lotto,n){
+  if(!art||!tg||!n)return;const k=art+'|'+tg+'|'+(lotto||'');
+  const c=(esito.scorta=esito.scorta||{})[k]||(esito.scorta[k]={art,tg,lotto:lotto||'',d:0});c.d+=n}
+function elencoScorte(D,esito){
+  const soglia=sogliaScorta(D);const out=[];
+  for(const c of Object.values(esito.scorta||{})){
+    if(c.d>=0)continue; // solo quello che il foglio fa calare
+    const {n,cosa}=restoScorta(D,c.art,c.tg,null,'',c.lotto||null);const dopo=n+c.d;
+    if(dopo>=soglia&&dopo>0)continue;
+    out.push({dopo,testo:dopo<0?`${cosa}: da ordinare ${-dopo}`:dopo===0?`${cosa}: esaurito`:`${cosa}: ne ${dopo===1?'resta':'restano'} ${dopo}`})}
+  // prima quelli da ordinare, dal piu' scoperto; poi dal piu' scarso
+  return out.sort((a,b)=>a.dopo-b.dopo).map(x=>x.testo)}
+/* Si chiama dopo aver scritto, senza aspettarla: parte quando la finestra si e'
+   chiusa e i conti sono rifatti. voce = {art, tg, aid, modello, rid}: rid e' la
+   richiesta appena creata o modificata, se c'e'. */
+function controllaScorta(voce){
+  setTimeout(()=>{
+    const D=derive();const soglia=sogliaScorta(D);
+    const {n,ord,cosa}=restoScorta(D,voce.art,voce.tg,voce.aid,voce.modello);
+    const p=voce.rid&&D.prop[voce.rid];
+    let testo='';
+    if(p&&p.esito==='MANCA')testo=`${cosa}: non è disponibile in magazzino. La richiesta risulta da ordinare.`;
+    else if(n<=0)testo=`${cosa}: in magazzino non ne restano più da assegnare.`;
+    else if(n<soglia)testo=`${cosa}: ne ${n===1?'resta':'restano'} solo ${n} da assegnare (la soglia di avviso è ${soglia}).`;
+    if(!testo)return;
+    if(ord)testo+=` Ne ${ord===1?'risulta ordinato':'risultano ordinati'} ${ord} al fornitore.`;
+    S.app.ultimoAvvisoScorta=testo;
+    // il titolo dice subito di che si tratta: manca del tutto o sta finendo
+    avvisoFisso((p&&p.esito==='MANCA'||n<=0?'Non disponibile — ':'Scorta bassa — ')+testo)},300)}
 /* Un avviso che resta finche' non lo si chiude: per errori e blocchi, che nel
    messaggio in basso sparivano in tre secondi prima di poterli leggere. */
 function avvisoFisso(testo){
@@ -2283,9 +2343,11 @@ function dlgRichiesta(aid,rid,pre){
       numeroDesiderato:isNum&&fd.numero!==''?Number(fd.numero):null,note:fd.note||''};
     if(vecchia){
       const ok=await w(()=>S.db.doc('richieste/'+rid).update(corpo));
-      if(ok)toast('Richiesta modificata');
+      if(ok){toast('Richiesta modificata');controllaScorta({art:corpo.articolo,tg:corpo.taglia,aid,modello:corpo.modello,rid})}
       return ok}
-    const ok=await w(()=>S.db.collection('richieste').add({atletaId:aid,...corpo,ordine:Date.now()}));
+    let nuova=null;
+    const ok=await w(async()=>{nuova=await S.db.collection('richieste').add({atletaId:aid,...corpo,ordine:Date.now()})});
+    if(ok)controllaScorta({art:corpo.articolo,tg:corpo.taglia,aid,modello:corpo.modello,rid:nuova&&nuova.id});
     if(ok){toast('Richiesta aggiunta');if(btn==='again'){form.querySelector('#rNum').value='';form.querySelector('#rNote').value='';return false}}
     return ok});
   const upd=()=>{const n=$('#rArt').value;const tenuta=$('#rTg').value;
@@ -2339,6 +2401,7 @@ function dlgMovimento(nomeFuori){
     if(fd.tipo==='CONSEGNA'&&st<qta&&!await chiedi(`In magazzino ne risultano ${st}. Registrare comunque l’uscita di ${qta}?`))return false;
     const ok=await w(()=>mov({tipo:fd.tipo,articolo:fd.articolo,taglia:tg,qta,atletaId:null,a:chi,note:fd.note||''}));
     if(ok)toast(fd.tipo==='CONSEGNA'?`${qta} ${qta===1?'pezzo consegnato':'pezzi consegnati'} a ${chi}`:`${qta} ${qta===1?'pezzo rientrato':'pezzi rientrati'} da ${chi}`);
+    if(ok&&fd.tipo==='CONSEGNA')controllaScorta({art:fd.articolo,tg});
     return ok});
 
   if(nomeFuori)$('#mFuori').value=nomeFuori;
@@ -2411,7 +2474,7 @@ function dlgDiretta(aid){
           await S.db.doc('divise/'+oid).update({holder:null,daRestituire:false,tagliaChiesta:null});
           await mov({tipo:'RIENTRO',atletaId:aid,articolo:art,taglia:od.taglia,divisaId:oid,numero:od.numero,prevHolder:aid,prevDR:!!od.daRestituire,prevTC:od.tagliaChiesta||null,note:'Restituita al cambio'})}
         if(rid)await S.db.doc('richieste/'+rid).delete()}));
-      if(ok)toast(`Consegnata la ${d.taglia} n.${d.numero}${rid?', richiesta chiusa':''}`);
+      if(ok){toast(`Consegnata la ${d.taglia} n.${d.numero}${rid?', richiesta chiusa':''}`);controllaScorta({art,tg:d.taglia,aid,modello:fd.modello})}
       return ok}
     const tg=fd.taglia;if(!tg){toast('Selezionare la taglia');return false}
     const qta=Math.max(1,Number(fd.qta)||1);
@@ -2422,7 +2485,7 @@ function dlgDiretta(aid){
     const ok=await w(()=>insieme(async()=>{
       await mov({tipo:'CONSEGNA',atletaId:aid,articolo:art,taglia:tg,qta,...(foto?{richiesta:foto}:{})});
       if(rid)await S.db.doc('richieste/'+rid).delete()}));
-    if(ok)toast(`${qta} ${qta===1?'pezzo consegnato':'pezzi consegnati'}${rid?', richiesta chiusa':''}`);
+    if(ok){toast(`${qta} ${qta===1?'pezzo consegnato':'pezzi consegnati'}${rid?', richiesta chiusa':''}`);controllaScorta({art,tg,aid})}
     return ok});
 
   // Divisa o materiale cambiano mezza finestra: si mostra solo quello che serve.
@@ -2980,6 +3043,9 @@ document.addEventListener('click',async e=>{
     case'matRow':return dlgMat(el.dataset.art,el.dataset.tg);
     case'mvAll':S.ui.mvAll=true;return render();
     case'annulla':return annullaMovimento(id);
+    case'saveSoglia':{const v=Math.max(0,Math.round(Number($('#soglia').value)));
+      if(!Number.isFinite(v)){toast('Indicare un numero');return}
+      if(await w(()=>S.db.doc('settings/main').update({sogliaScorta:v})))toast(v?`Avviso sotto i ${v} pezzi`:'Avviso solo quando non ce n’è più');return}
     case'saveSoc':{const v=$('#soc').value.trim();
       if(await w(()=>S.db.doc('settings/main').update({societa:v})))toast(v?'Nome salvato':'Nome tolto');return}
     case'scegliLogo':{
@@ -4024,13 +4090,14 @@ async function caricaModulo(){
   const prova=await eseguiModulo(D,daFare,true);
   prova.problemi.unshift(...problemi);prova.avvisi.unshift(...avvisiModulo);
   prova.squadreNuove=[...squadreNuove];
+  prova.scorte=elencoScorte(D,prova);
   if(!prova.creati&&!prova.aggiornati&&!prova.posseduti&&!prova.tolti&&!prova.consegne&&!prova.spostati){mostraEsitoExcel('Modulo di distribuzione',prova,'nessun dato nuovo da caricare');return}
   if(!await chiedi(riepilogoCaricamento('Modulo di distribuzione',prova,{creati:['atleta nuovo','atleti nuovi'],aggiornati:['richiesta nuova o corretta','richieste nuove o corrette']}),{si:'Carica'}))return;
   const r=await scriviConRete('Modulo di distribuzione',()=>eseguiModulo(D,daFare,false));
   if(!r)return;
   if(r.errore){mostraEsitoExcel('Modulo di distribuzione',{problemi:[interrotto(r.errore)],avvisi:[]},'caricamento interrotto');return}
   const esito=r.esito;
-  esito.problemi.unshift(...problemi);esito.avvisi.unshift(...avvisiModulo);esito.squadreNuove=prova.squadreNuove;
+  esito.problemi.unshift(...problemi);esito.avvisi.unshift(...avvisiModulo);esito.squadreNuove=prova.squadreNuove;esito.scorte=prova.scorte;
   mostraEsitoExcel('Modulo di distribuzione',esito,sintesiEsito(esito,{creati:['atleta nuovo','atleti nuovi'],aggiornati:['richiesta','richieste']}));
 }
 
@@ -4132,6 +4199,7 @@ async function modConsegnato(D,d,aid,x,prova,esito,aperte,consegnati,presiQui,sh
     if(!ancora&&Object.entries(D.dotazione[aid]||{}).some(([kk,v])=>v>0&&kk.split('|')[0]===art.nome))
       esito.avvisi.push(`${chi}: ${artLabel(art.nome)} consegnato senza richiesta, e l’atleta ne aveva già uno: verificare`);
     if(!prova)await mov({tipo:'CONSEGNA',atletaId:aid,articolo:art.nome,taglia:tg,qta:1,note:'Dal modulo di distribuzione'});
+    contaScorta(esito,art.nome,tg,'',-1);
     consegnati.add(KEY(aid+'|'+art.nome+'|'+tg));esito.consegne++;return}
   const [rid,rq]=aperteQui[0];
   let p={};
@@ -4153,6 +4221,7 @@ async function modConsegnato(D,d,aid,x,prova,esito,aperte,consegnati,presiQui,sh
   }else if(tg&&tg!==rq.taglia){
     // consegnata una taglia diversa da quella chiesta: vale quella del foglio
     if(!prova)await S.db.doc('richieste/'+rid).update({taglia:tg});
+    contaScorta(esito,art.nome,rq.taglia,'',1);contaScorta(esito,art.nome,tg,'',-1);
     esito.avvisi.push(`${chi}: ${artLabel(art.nome)} consegnato in taglia ${tg} invece di ${rq.taglia}`);
   }
   if(!conNum&&((D.stock[D.key(art.nome,tg||rq.taglia)]||{ora:0}).ora)<1)
@@ -4230,6 +4299,9 @@ async function eseguiModulo(D,daFare,prova){
         if(!prova)await S.db.doc('atlete/'+aid).update({note:d.note});
       }
       const at=S.atlete[aid];
+      // il lotto delle divise di questa riga (un'atleta nuova non e' ancora in S)
+      const lottoRiga=at?D.modelloPer({atletaId:aid,modello:''}):(D.lotto[d.squadra]||'STANDARD');
+      const lot=a=>D.conNumero(a)?lottoRiga:'';
       // Nel programma il nome ha l'apostrofo al posto dell'accento («Provato'»):
       // si corregge, e lo si dice.
       if(at&&(at.cognome!==conAccenti(at.cognome)||at.nome!==conAccenti(at.nome))){
@@ -4261,6 +4333,7 @@ async function eseguiModulo(D,daFare,prova){
           const via=(aperte[k]||[]).filter(([,q])=>!conN||tipoLotto(q.modello||'')!=='libero');
           for(const [rid,q] of via){
             if(!prova&&rid&&S.richieste[rid])await S.db.doc('richieste/'+rid).delete();
+            contaScorta(esito,x.art.nome,q.taglia,lot(x.art.nome),1);
             esito.tolti++;(esito.nomiTolti=esito.nomiTolti||[]).push(`${d.cognome} ${d.nome}, ${artLabel(x.art.nome).toLowerCase()}`);esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome}: nel modulo «ce l’ho» per ${artLabel(x.art.nome)}: tolta la richiesta${q.taglia&&q.taglia!=='UNICA'?' in taglia '+q.taglia:''}`)}
           if(via.length)aperte[k]=(aperte[k]||[]).filter(e=>!via.includes(e));
           // la divisa che doveva cambiare, se ormai la tiene, non rientra piu'
@@ -4298,15 +4371,16 @@ async function eseguiModulo(D,daFare,prova){
           // rispetto alla fotografia dello scarico (se no un foglio senza la
           // colonna, dove vuoto vale 1, toglierebbe richieste in blocco).
           let fatto=false;
-          for(const e of corr)if(e[1].taglia!==taglia){if(!prova)await S.db.doc('richieste/'+e[0]).update({taglia});e[1]={...e[1],taglia};fatto=true}
+          for(const e of corr)if(e[1].taglia!==taglia){if(!prova)await S.db.doc('richieste/'+e[0]).update({taglia});contaScorta(esito,x.art.nome,e[1].taglia,'',1);contaScorta(esito,x.art.nome,taglia,'',-1);e[1]={...e[1],taglia};fatto=true}
           if(fatto){esito.aggiornati++;esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome}: le richieste di ${artLabel(x.art.nome)} passano alla taglia ${taglia}`)}
           for(let i=corr.length;i<x.n;i++){
             const nuova={atletaId:aid,articolo:x.art.nome,taglia,modello:'',numeroDesiderato:null,note:'',ordine:Date.now()+i};
             const ref=prova?{id:'PROVA'+i}:await S.db.collection('richieste').add(nuova);
+            contaScorta(esito,x.art.nome,taglia,'',-1);
             (aperte[KEY(aid+'|'+x.art.nome)]=stesse).push([ref&&ref.id,nuova]);esito.aggiornati++;fatto=true}
           if(corr.length>x.n&&d.orig){
             const via=corr.slice(x.n);
-            for(const [rid] of via)if(!prova&&rid&&S.richieste[rid])await S.db.doc('richieste/'+rid).delete();
+            for(const [rid,q] of via){if(!prova&&rid&&S.richieste[rid])await S.db.doc('richieste/'+rid).delete();contaScorta(esito,x.art.nome,q.taglia,'',1)}
             aperte[KEY(aid+'|'+x.art.nome)]=stesse.filter(e=>!via.includes(e));
             esito.tolti+=via.length;(esito.nomiTolti=esito.nomiTolti||[]).push(`${d.cognome} ${d.nome}, ${artLabel(x.art.nome).toLowerCase()} (da ${corr.length} a ${x.n} pezzi)`);fatto=true}
           if(!fatto)esito.saltati++;
@@ -4322,7 +4396,8 @@ async function eseguiModulo(D,daFare,prova){
           // della divisa da gara.
           const sue=Object.entries(S.divise).filter(([id,dv])=>dv.holder===aid&&!dv.dismessa&&stessoGenere(dv.modello,''));
           const suo=d.numero?sue.find(([,dv])=>Number(dv.numero)===Number(d.numero)):(sue.length===1?sue[0]:null);
-          if(suo){if(suo[1].daRestituire)return false;if(!prova)await S.db.doc('divise/'+suo[0]).update({daRestituire:true});return true}
+          if(suo){if(suo[1].daRestituire)return false;if(!prova)await S.db.doc('divise/'+suo[0]).update({daRestituire:true});
+            contaScorta(esito,x.art.nome,suo[1].taglia,suo[1].modello||'STANDARD',1);return true}
           esito.avvisi.push(sue.length>1&&!d.numero
             ?`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma ne ha più di una e il numero non è indicato: va segnata a mano`
             :`${d.q}: ${d.cognome} ${d.nome}: deve cambiare la divisa ma non ne risulta nessuna${d.numero?' con il n.'+d.numero:''}`);return false};
@@ -4330,12 +4405,15 @@ async function eseguiModulo(D,daFare,prova){
         if(corr.length){
           // stessa cosa, taglia diversa: la richiesta si corregge. Anche la
           // divisa: prima ne nasceva una seconda accanto alla vecchia.
-          const [rid]=corr[0];if(!prova)await S.db.doc('richieste/'+rid).update({taglia});corr[0][1]={...corr[0][1],taglia};
+          const [rid]=corr[0];if(!prova)await S.db.doc('richieste/'+rid).update({taglia});
+          contaScorta(esito,x.art.nome,corr[0][1].taglia,lot(x.art.nome),1);contaScorta(esito,x.art.nome,taglia,lot(x.art.nome),-1);
+          corr[0][1]={...corr[0][1],taglia};
           esito.avvisi.push(`${d.q}: ${d.cognome} ${d.nome}: la richiesta di ${artLabel(x.art.nome)} passa alla taglia ${taglia}`);
           esito.aggiornati++;await segnaCambio();continue}
         const nuova={atletaId:aid,articolo:x.art.nome,taglia,modello:'',numeroDesiderato:null,note:'',ordine:Date.now()};
         const ref=prova?{id:'PROVA'}:await S.db.collection('richieste').add(nuova);
         (aperte[KEY(aid+'|'+x.art.nome)]=stesse).push([ref&&ref.id,nuova]);
+        contaScorta(esito,x.art.nome,taglia,lot(x.art.nome),-1);
         esito.aggiornati++;
         await segnaCambio();
       }
@@ -4488,6 +4566,8 @@ function riepilogoCaricamento(nome,e,voci){
   if(e.invariati)righe.push('Le altre caselle non sono cambiate rispetto al foglio scaricato e vengono ignorate.');
   if(e.squadreNuove&&e.squadreNuove.length)righe.push(`Squadre nuove: ${e.squadreNuove.join(', ')}.`);
   if(e.lottiNuovi&&e.lottiNuovi.length)righe.push(`Lotti di divise nuovi: ${e.lottiNuovi.join(', ')}.`);
+  if(e.scorte&&e.scorte.length){righe.push('','Scorte da controllare dopo questo caricamento:');
+    righe.push(...e.scorte.slice(0,8).map(x=>'• '+x));if(e.scorte.length>8)righe.push(`• …e altre ${e.scorte.length-8}, nell’esito`)}
   if(e.problemi.length){righe.push('',`${e.problemi.length===1?'Una riga contiene errori e non verrà caricata':e.problemi.length+' righe contengono errori e non verranno caricate'}:`);
     righe.push(...e.problemi.slice(0,5).map(x=>'• '+x));if(e.problemi.length>5)righe.push(`• …e altre ${e.problemi.length-5}`)}
   // le richieste tolte sono gia' elencate sopra: fra gli avvisi non si ripetono
@@ -4513,7 +4593,7 @@ function sintesiEsito(e,voci){
    passava inosservato. Resta ricordato per poterla riaprire. */
 function mostraEsitoExcel(nome,e,sintesi){
   const u=S.app.annulla;
-  S.app.esitoExcel={nome,problemi:e.problemi||[],avvisi:e.avvisi||[],sintesi:sintesi||'',quando:new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}),
+  S.app.esitoExcel={nome,problemi:e.problemi||[],avvisi:e.avvisi||[],scorte:e.scorte||[],sintesi:sintesi||'',quando:new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}),
     annullabile:u&&u.nome===nome&&Date.now()-u.id<5000?u.id:null};
   S.app.problemiExcel=e.problemi||[];
   render();
@@ -4524,8 +4604,9 @@ function finestraEsitoExcel(){
   const blocco=(titolo,voci,cls)=>voci.length?`<h3 class="esitoTit ${cls}">${titolo}</h3><ul class="esitoLista">${voci.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`:'';
   openDlg(`<h2>Esito del caricamento</h2>
   <p class="sub">«${esc(e.nome)}», alle ${esc(e.quando)}${e.sintesi?`: ${esc(e.sintesi)}`:''}.</p>
-  ${!e.problemi.length&&!e.avvisi.length?'<div class="notice">Tutte le righe sono state caricate o erano già presenti: nessun errore e nessun avviso.</div>':''}
+  ${!e.problemi.length&&!e.avvisi.length&&!(e.scorte||[]).length?'<div class="notice">Tutte le righe sono state caricate o erano già presenti: nessun errore e nessun avviso.</div>':''}
   ${blocco(e.problemi.length===1?'Una riga non caricata':e.problemi.length+' righe non caricate',e.problemi,'bad')}
+  ${blocco('Scorte da controllare (calcolate prima del caricamento)',e.scorte||[],'bad')}
   ${blocco(e.avvisi.length===1?'Un avviso da verificare':e.avvisi.length+' avvisi da verificare',e.avvisi,'')}
   <div class="dlg-actions">${e.annullabile&&S.app.annulla&&S.app.annulla.id===e.annullabile?'<button class="btn danger" value="annullaCar" style="margin-right:auto">Annulla questo caricamento</button>':''}<button class="btn primary" value="cancel">Chiudi</button></div>`,
   async(fd,btn)=>{if(btn==='annullaCar')return annullaCaricamento();return true});

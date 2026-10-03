@@ -818,6 +818,68 @@ const carica = async (tipo, righe) => {
       "se le maglie uguali sono davvero due, rispondendo no allo scambio la correzione si salva lo stesso");
   }
 
+  /* 9q. avviso di scorta bassa: aggiungendo una richiesta il programma dice se
+     quell'articolo non c'e' o se ne restano meno della soglia */
+  {
+    const aid = w.eval("Object.keys(S.atlete).find(k=>puoRicevere(S.atlete[k]))");
+    const t0 = Date.now();
+    const resto = (a, t) => w.eval(`restoScorta(derive(),${JSON.stringify(a)},${JSON.stringify(t)},${JSON.stringify(aid)}).n`);
+    const nuovaRichiesta = async (a, t) => {
+      w.eval("S.app.ultimoAvvisoScorta=null");
+      w.eval(`dlgRichiesta(${JSON.stringify(aid)})`); await attendi(100);
+      const f = w.document;
+      f.querySelector("#rArt").value = a; f.querySelector("#rArt").dispatchEvent(new w.Event("change"));
+      f.querySelector("#rTg").value = t;
+      f.querySelector("#dlgForm").requestSubmit(); await attendi(700);
+      return w.eval("S.app.ultimoAvvisoScorta");
+    };
+    // un materiale con qualche pezzo da assegnare, e uno senza
+    const voci = w.eval(`(()=>{const D=derive();return (D.set.articoli||[]).filter(a=>!D.conNumero(a.nome)&&a.distribuibile!==false).flatMap(a=>a.taglie.map(t=>[a.nome,t]))})()`);
+    const conPezzi = voci.find(([a, t]) => resto(a, t) >= 3);
+    const senza = voci.find(([a, t]) => resto(a, t) <= 0);
+    const r0 = resto(...conPezzi);
+    await w.eval(`S.db.doc('settings/main').update({sogliaScorta:${r0 + 2}})`); await attendi(200);
+    const a1 = await nuovaRichiesta(...conPezzi);
+    ok(!!a1 && /restano solo|resta solo/.test(a1) && a1.includes(String(r0 - 1)),
+      `sotto la soglia arriva l'avviso con quanti ne restano (${a1})`);
+    await w.eval("S.db.doc('settings/main').update({sogliaScorta:0})"); await attendi(200);
+    const a2 = await nuovaRichiesta(...conPezzi);
+    ok(a2 == null, "con soglia 0 e pezzi ancora disponibili non arriva nessun avviso");
+    if (senza) {
+      const a3 = await nuovaRichiesta(...senza);
+      ok(!!a3 && /da ordinare/.test(a3), `un articolo che non c'è: la richiesta risulta da ordinare (${a3})`);
+    }
+    // le richieste di prova si tolgono: le prove dopo confrontano i conteggi
+    await w.eval(`(async()=>{for(const [k,r] of Object.entries(S.richieste))if(r.atletaId===${JSON.stringify(aid)}&&r.ordine>${t0})await S.db.doc('richieste/'+k).delete()})()`); await attendi(200);
+    await w.eval("S.db.doc('settings/main').update({sogliaScorta:null})"); await attendi(200);
+    ok(w.eval("sogliaScorta(derive())") === 5, "senza soglia scritta vale 5");
+  }
+
+  /* 9r. caricando il foglio: le scorte che finirebbero sotto la soglia stanno
+     nel riepilogo prima di «Carica», non in una finestra per articolo */
+  {
+    await w.eval("scaricaModulo()"); await attendi(300);
+    const f = modulo.scritto.fogli.find((x) => !x.nascosto && x.righe.length);
+    const testa = [f.intestazioni.map((t, k) => (!f.gruppi[k] ? t : k > 0 && f.gruppi[k - 1] === f.gruppi[k] ? "" : f.gruppi[k])), f.intestazioni.map((t, k) => (f.gruppi[k] ? t : ""))];
+    const kR = f.intestazioni.findIndex((t, j) => t === "Risposta" && f.intestazioni[j + 1] === "Taglia" && f.intestazioni[j + 2] === "Pezzi");
+    const art = w.eval(`articoloDaNome(derive(),${JSON.stringify(f.gruppi[kR])}).nome`);
+    const tg = w.eval(`articoloDaNome(derive(),${JSON.stringify(f.gruppi[kR])}).taglie[0]`);
+    const n0 = w.eval(`restoScorta(derive(),${JSON.stringify(art)},${JSON.stringify(tg)},null).n`);
+    await w.eval(`S.db.doc('settings/main').update({sogliaScorta:${Math.max(0, n0) + 10}})`); await attendi(200);
+    const r = [...f.righe[0]]; r[kR] = "mi manca"; r[kR + 1] = tg; r[kR + 2] = "3";
+    modulo.daLeggere = [[f.nome, [...testa, r]]];
+    let domanda = "";
+    const prima = w.eval("window.__rispostaConferme");
+    w.__rispostaConferme = (t) => { if (/Caricare i dati validi/.test(t)) { domanda = t; return false; } return true; };
+    await w.eval("caricaModulo()"); await attendi(900);
+    w.eval(`window.__rispostaConferme = ${JSON.stringify(prima)}`);
+    const cosa = w.eval(`restoScorta(derive(),${JSON.stringify(art)},${JSON.stringify(tg)},null).cosa`);
+    if (process.env.MOSTRA_RIEPILOGO) console.log(domanda);
+    ok(/Scorte da controllare dopo questo caricamento/.test(domanda) && domanda.includes(cosa),
+      `il riepilogo del foglio elenca le scorte che scendono sotto la soglia (${cosa})`);
+    await w.eval("S.db.doc('settings/main').update({sogliaScorta:null})"); await attendi(200);
+  }
+
   /* 9g. divisa dismessa: si annulla da Movimenti */
   {
     const id = w.eval("Object.keys(S.divise).find(k=>!S.divise[k].holder&&!S.divise[k].dismessa)");
