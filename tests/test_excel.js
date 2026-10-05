@@ -880,6 +880,125 @@ const carica = async (tipo, righe) => {
     await w.eval("S.db.doc('settings/main').update({sogliaScorta:null})"); await attendi(200);
   }
 
+  /* 9s. storico e ordini: i conti per stagione tornano con la giacenza, e la
+     proposta d'ordine segue la regola concordata */
+  {
+    // la regola che si controlla da sola: «rimaste ora» della stagione in corso
+    // e' la giacenza del magazzino, articolo per articolo
+    const diversi = w.eval(`(()=>{const D=derive();const r=storicoStagione(D,D.set.stagione);const out=[];
+      for(const [k,x] of Object.entries(r)){const g=(D.stock[k]||{ora:0}).ora;if(g!==x.ora)out.push(k+' '+x.ora+'/'+g)}
+      for(const [k,q] of Object.entries(D.stock)){const a=k.split('|')[0];if(!D.conNumero(a)&&!r[k]&&q.ora)out.push(k+' manca')}
+      return out})()`);
+    ok(diversi.length === 0, `storico: le rimaste di ogni articolo e taglia coincidono con la giacenza (${diversi.slice(0, 3).join('; ')})`);
+    const regola = w.eval(`(()=>{const D=derive();const p=percScorta(D);
+      return Object.values(storicoStagione(D,D.set.stagione)).every(x=>{const o=propostaOrdine(D,x);const u=Math.max(0,x.distr);
+        const sc=u>0?Math.max(1,Math.ceil(u*p/100)):0;return o.scorta===sc&&o.da===Math.max(0,u+o.aperte+sc-x.ora-o.inArrivo)})})()`);
+    ok(regola === true && w.eval("percScorta(derive())") === 25, "storico: da ordinare = distribuite + richieste aperte + scorta (25%) − rimaste − in arrivo");
+    // una consegna senza richiesta: distribuite +2; poi «Salva come ordine» mette
+    // la proposta fra gli ordinati e la proposta di quella taglia va a zero
+    const [art, tg] = w.eval(`(()=>{const D=derive();const r=storicoStagione(D,D.set.stagione);
+      const x=Object.values(r).find(x=>x.ora>=3&&!(D.stock[D.key(x.art,x.tg)]||{}).ordinati);return [x.art,x.tg]})()`);
+    const riga = () => w.eval(`(()=>{const D=derive();const x=storicoStagione(D,D.set.stagione)[D.key(${JSON.stringify(art)},${JSON.stringify(tg)})];return {...x,...propostaOrdine(D,x)}})()`);
+    const r0 = riga();
+    await w.eval(`mov({tipo:'CONSEGNA',articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:2,a:'Prova staff'})`); await attendi(200);
+    const r1 = riga();
+    ok(r1.distr === r0.distr + 2 && r1.ora === r0.ora - 2, `storico: una consegna di 2 pezzi sposta distribuite e rimaste (${r0.distr}->${r1.distr}, ${r0.ora}->${r1.ora})`);
+    w.eval("S.ui.magTab='storico';location.hash='#magazzino';render()"); await attendi(100);
+    ok(!!w.document.querySelector("table.storico input.ordIn"), "storico: la scheda si apre con la colonna Da ordinare");
+    w.eval("S.ui.ordEdit={}");
+    const k = w.eval(`derive().key(${JSON.stringify(art)},${JSON.stringify(tg)})`);
+    w.eval(`S.ui.ordEdit[${JSON.stringify(k)}]='7'`);
+    await w.eval("salvaOrdine()"); await attendi(300);
+    const r2 = riga();
+    ok(r2.inArrivo === 7, `storico: «Salva come ordine» aggiunge il numero scritto agli ordinati (${r2.inArrivo})`);
+    // una casella svuotata vale zero, non la proposta
+    w.eval(`S.ui.ordEdit={[${JSON.stringify(k)}]:''}`);
+    ok(w.eval(`righeStorico().v.find(x=>derive().key(x.art,x.tg)===${JSON.stringify(k)}).scritto`) === 0, "storico: una casella Da ordinare svuotata vale zero");
+    w.eval("S.ui.ordEdit={}");
+    // soglia vuota = valore predefinito
+    w.eval("location.hash='#impostazioni';render()"); await attendi(100);
+    w.document.querySelector("#soglia").value = "";
+    w.document.querySelector('[data-act="saveSoglia"]').click(); await attendi(300);
+    ok(w.eval("derive().set.sogliaScorta") == null && w.eval("sogliaScorta(derive())") === 5, "impostazioni: la soglia lasciata vuota torna al valore predefinito");
+    // correggere il nome della stagione porta con se' i movimenti
+    const stagPrima = w.eval("derive().set.stagione");
+    w.document.querySelector("#stag").value = stagPrima + "x";
+    w.document.querySelector('[data-act="saveStag"]').click(); await attendi(400);
+    const resto = w.eval(`(()=>{const D=derive();return Object.values(S.movimenti).filter(m=>m.stagione===${JSON.stringify(stagPrima)}).length})()`);
+    const giusti = w.eval(`(()=>{const D=derive();const r=storicoStagione(D,D.set.stagione);return Object.entries(r).every(([k,x])=>(D.stock[k]||{ora:0}).ora===x.ora)})()`);
+    w.document.querySelector("#stag").value = stagPrima;
+    w.document.querySelector('[data-act="saveStag"]').click(); await attendi(400);
+    ok(resto === 0 && giusti && w.eval("derive().set.stagione") === stagPrima, "stagione: correggendo il nome anche i movimenti cambiano, e lo storico torna con la giacenza");
+    w.eval("S.ui.magTab='divise';render()");
+  }
+
+  /* 9t. foglio del riconto: si scarica, si scrivono i contati, le differenze
+     diventano rettifiche; le consegne fatte dopo lo scarico restano valide */
+  {
+    await w.eval("scaricaRiconto()"); await attendi(300);
+    const f = fogliScritti["Riconto"];
+    ok(!!f && f.intestazioni.join("|") === "Articolo|Taglia|Nel programma|Contati|Foglio del" && f.righe.length > 5, `riconto: il foglio si scarica (${f && f.righe.length} righe)`);
+    const conPezzi = f.righe.filter((r) => Number(r[2]) >= 5);
+    const [ra, rb] = conPezzi;
+    const chiave = (r) => w.eval(`(()=>{const D=derive();const a=articoloDaNome(D,${JSON.stringify(r[0])});return D.key(a.nome,${JSON.stringify(r[1])}==='unica'?'UNICA':${JSON.stringify(r[1])})})()`);
+    const ka = chiave(ra), kb = chiave(rb);
+    const giac = (k) => w.eval(`(derive().stock[${JSON.stringify(k)}]||{ora:0}).ora`);
+    // dopo lo scarico si consegna un pezzo della prima riga
+    const [aA, tA] = ka.split("|");
+    await w.eval(`mov({tipo:'CONSEGNA',articolo:${JSON.stringify(aA)},taglia:${JSON.stringify(tA)},qta:1,a:'Prova staff'})`); await attendi(200);
+    const righe = f.righe.map((r) => [...r]);
+    const ia = f.righe.indexOf(ra), ib = f.righe.indexOf(rb);
+    righe[ia][3] = String(Number(ra[2]) - 2); // contati 2 in meno di quelli del foglio
+    righe[ib][3] = String(Number(rb[2]));     // uguale: nessuna rettifica
+    daLeggere = [["Solo informative", "", "", "Da compilare", "Solo informative"], f.intestazioni, ...righe];
+    const nRett = () => Object.values(w.eval("S.movimenti")).filter((m) => m.tipo === "RETTIFICA").length;
+    const r0 = nRett(), gA = giac(ka), gB = giac(kb);
+    await w.eval("caricaRiconto()"); await attendi(900);
+    ok(nRett() === r0 + 1 && giac(ka) === gA - 2 && giac(kb) === gB,
+      `riconto: una sola rettifica (−2), calcolata sul numero del foglio; la consegna fatta dopo resta (${gA} -> ${giac(ka)})`);
+    const esito = w.eval("S.app.esitoExcel");
+    ok(esito && /rettific/.test(esito.sintesi) && esito.avvisi.some((x) => /dallo scarico del foglio/.test(x)),
+      "riconto: l'esito dice le rettifiche e avvisa della consegna avvenuta dopo lo scarico");
+    // lo stesso foglio caricato di nuovo: la rettifica non si ripete
+    const r2 = nRett(), gA2 = giac(ka);
+    await w.eval("caricaRiconto()"); await attendi(600);
+    ok(nRett() === r2 && giac(ka) === gA2, "riconto: ricaricando lo stesso foglio la rettifica non si ripete");
+    // una riga senza taglia per un articolo che ha le taglie: rifiutata
+    const conTaglie = f.righe.find((r) => r[1] !== "unica");
+    daLeggere = [["Solo informative", "", "", "Da compilare"], f.intestazioni, [conTaglie[0], "", conTaglie[2], "3", conTaglie[4]]];
+    const r3 = nRett();
+    await w.eval("caricaRiconto()"); await attendi(400);
+    ok(nRett() === r3 && /manca la taglia/.test((w.eval("S.app.esitoExcel").problemi || []).join(" ")), "riconto: senza taglia, per un articolo con le taglie, la riga è rifiutata");
+    // un foglio sbagliato non registra niente
+    daLeggere = [["Cognome", "Nome"], ["Provetta", "Esempia"]];
+    const r1 = nRett();
+    await w.eval("caricaRiconto()"); await attendi(400);
+    ok(nRett() === r1 && /non sembra quello del riconto/.test((w.eval("S.app.esitoExcel").problemi || [])[0] || ""), "riconto: un foglio che non è del riconto viene rifiutato");
+  }
+
+  /* 9u. difetti trovati dalle prove a caso (05/10/2026) */
+  {
+    // tempi dei movimenti sempre crescenti, anche nello stesso millesimo
+    const ts = await w.eval(`(async()=>{const fermo=Date.now;Date.now=()=>1;const a=[];for(let i=0;i<5;i++){const r=await mov({tipo:'CARICO',articolo:'X',taglia:'M',qta:0});a.push(r.id)}Date.now=fermo;
+      await new Promise(q=>setTimeout(q,300));const t=a.map(id=>(S.movimenti[id]||{}).ts);
+      for(const id of a)await S.db.doc('movimenti/'+id).delete();return t})()`);
+    await attendi(200);
+    ok(ts.every((t, i) => i === 0 || t > ts[i - 1]), "i movimenti hanno tempi sempre crescenti");
+    // consegna diretta di 2 pezzi a chi ne ha chiesti 2: si chiudono tutte e due le richieste
+    const aid = w.eval("Object.keys(S.atlete).find(k=>puoRicevere(S.atlete[k]))");
+    const [art, tg] = w.eval(`(()=>{const D=derive();const x=Object.values(storicoStagione(D,D.set.stagione)).find(x=>x.ora>=4);return [x.art,x.tg]})()`);
+    for (let i = 0; i < 2; i++) await w.eval(`S.db.collection('richieste').add({atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},modello:'',numeroDesiderato:null,note:'',ordine:Date.now()+${i}})`);
+    await attendi(200);
+    const aperte = () => Object.values(w.eval("S.richieste")).filter((r) => r.atletaId === aid && r.articolo === art && r.taglia === tg).length;
+    const a0 = aperte();
+    w.eval(`dlgDiretta(${JSON.stringify(aid)})`); await attendi(100);
+    const fd = w.document;
+    fd.querySelector("#dArt").value = art; fd.querySelector("#dArt").dispatchEvent(new w.Event("change")); await attendi(50);
+    fd.querySelector("#dTg").value = tg; fd.querySelector("#dQta").value = "2";
+    fd.querySelector("#dlgForm").requestSubmit(); await attendi(600);
+    ok(a0 >= 2 && aperte() === a0 - 2, `consegna diretta di 2 pezzi: si chiudono 2 richieste (${a0} -> ${aperte()})`);
+  }
+
   /* 9g. divisa dismessa: si annulla da Movimenti */
   {
     const id = w.eval("Object.keys(S.divise).find(k=>!S.divise[k].holder&&!S.divise[k].dismessa)");
@@ -984,7 +1103,7 @@ const carica = async (tipo, righe) => {
   // Per guardare i file veri: SALVA_FOGLI=<cartella> scrive qui quello che
   // arriverebbe alla parte Rust (lo usa la prova `scrive_i_fogli_salvati`).
   if (process.env.SALVA_FOGLI) {
-    fs.writeFileSync(path.join(process.env.SALVA_FOGLI, "fogli.json"), JSON.stringify({ fogli, modulo: modulo.scritto }));
+    fs.writeFileSync(path.join(process.env.SALVA_FOGLI, "fogli.json"), JSON.stringify({ fogli: [...fogli, fogliScritti.Riconto].filter(Boolean), modulo: modulo.scritto }));
   }
   {
     const tutti = [...fogli, ...modulo.scritto.fogli];

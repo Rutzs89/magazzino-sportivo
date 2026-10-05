@@ -238,6 +238,8 @@ a.item:hover{background:var(--bg)}
 .barraMag>.btn{flex:none;margin-left:auto}
 .barraMag>.btn+.btn{margin-left:8px}
 @media(max-width:760px){.barraMag{flex-wrap:wrap}.barraMag .opzMag{flex:1 1 100%;order:3}}
+/* con la terza linguetta (Storico e ordini) la barra a 800-1100 px non ci sta piu' su una riga */
+@media(max-width:1100px){.barraMag{flex-wrap:wrap}.barraMag .opzMag{flex:1 1 100%;order:3}}
 /* I riquadri della pagina di partenza: si vogliono poter premere col pollice,
    quindi sono grandi, e il numero si legge da lontano. */
 /* La testa della pagina: stemma, nome, stagione, e il pulsante che si usa
@@ -255,6 +257,26 @@ body.inCasa #view{display:flex;flex-direction:column;justify-content:center;min-
    persone della stessa squadra si scopre in palestra, ed e' tardi. */
 .item.conflitto{box-shadow:inset 3px 0 0 var(--bad)}
 /* scheda di un atleta con l'eliminazione in corso: si deve vedere subito */
+#f_stagStorico{max-width:11em}
+/* titoli su due righe: a 800 px la colonna Da ordinare deve restare in vista */
+.storico th{white-space:normal;line-height:1.15;vertical-align:bottom}
+.storico th,.storico td{padding:6px 5px}
+/* [hidden] vale anche sugli elementi con un display scritto: nella finestra del
+   materiale le caselle da nascondere restavano visibili (trovato nel giro di prova) */
+.field[hidden],.two[hidden]{display:none}
+.storico .propOrig{display:block;color:var(--muted);font-size:11px}
+/* Tabelle del Materiale fra 800 e 1000 px: colonne piu' strette invece dello
+   scorrimento laterale (936 px contro 739 disponibili, trovato nel giro di prova) */
+@media(max-width:1000px){:root{--colNum:74px;--colUlt:84px}.artBox th{white-space:normal;line-height:1.15}}
+@media(max-width:480px){
+  /* telefono: la scritta della casella va a capo invece di uscire */
+  .barraMag .opzMag .check{white-space:normal}
+  /* righe con pulsanti a destra: i pulsanti vanno sotto, il testo resta leggibile */
+  .item{flex-wrap:wrap}.item .main{flex:1 1 150px}.item .right{flex:1 1 100%;justify-content:flex-start}
+  /* barra in basso: sette voci, carattere stretto perche' le parole non si tocchino */
+  .tabs a{font-family:var(--f-cond);font-size:11px;letter-spacing:-.1px;min-width:0;padding:4px 0}
+}
+.storico input.ordIn{width:4.2em;text-align:right;padding:4px 6px}
 .avvisoUscita{background:var(--bad-soft);border:1px solid var(--bad);border-left-width:5px;border-radius:var(--radius);padding:10px 14px;margin:8px 0 10px}
 .avvisoUscita b{color:var(--bad)}
 tr.conflitto th,tr.conflitto td{background:var(--bad-soft)}
@@ -467,7 +489,7 @@ td.art{font-weight:600;white-space:normal}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 
 .seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:3px}
-.seg button{border:0;background:transparent;padding:6px 14px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:500}
+.seg button{white-space:nowrap;border:0;background:transparent;padding:6px 14px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:500}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 
 .empty{padding:26px 16px;text-align:center;color:var(--muted)}
@@ -553,7 +575,7 @@ function applicaTema(){
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const cap=s=>String(s||'').toLowerCase().replace(/(^|[\s'\-])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase());
-const nomeTipo=t=>t==='POSSESSO'?'Già in possesso':t==='SCARTO'?'Dismesso':cap(t);
+const nomeTipo=t=>t==='POSSESSO'?'Già in possesso':t==='SCARTO'?'Dismesso':t==='CARICO'?'Arrivo':cap(t);
 const teamLabel=t=>t?cap(String(t).replace(/^UNDER /,'U')).replace(/^U(\d)/,'U$1'):'';
 /* Il nome da mostrare. Il codice dell'articolo resta quello scritto
    nell'archivio; qui si guarda se qualcuno gli ha dato famiglia ed etichetta. */
@@ -562,7 +584,10 @@ const artLabel=a=>{
   // "Felpa Felpa" non lo dice nessuno: quando l'etichetta e' gia' il nome
   // della famiglia, la famiglia non si ripete.
   if(x&&x.etichetta){const f=x.famiglia?cap(x.famiglia):'';
-    return f&&norm(f)!==norm(x.etichetta)?f+' '+x.etichetta:x.etichetta}
+    // dopo la famiglia l'etichetta continua in minuscolo, come il nome scritto
+    // per intero; le sigle (U14, XL) restano come sono
+    const e=x.etichetta;const e2=/^[A-ZÀ-Ý][a-zà-ÿ]/.test(e)?e.charAt(0).toLowerCase()+e.slice(1):e;
+    return f&&norm(f)!==norm(e)?f+' '+e2:e}
   const s=String(a||'').toLowerCase();return s.charAt(0).toUpperCase()+s.slice(1)};
 /* Solo la parte dentro la famiglia, per gli elenchi gia' raggruppati. */
 const artSolo=a=>{const x=_D&&_D.art?_D.art[a]:null;
@@ -1118,7 +1143,7 @@ function vAtleta(id){
   <button type="button" class="btn" data-act="newRichiesta" data-id="${esc(id)}">Nuova richiesta</button>
   <button type="button" class="btn" data-act="editAtleta" data-id="${esc(id)}">Modifica atleta</button>
   <button type="button" class="btn ghost danger" data-act="eliminaAtl" data-id="${esc(id)}">Elimina atleta…</button></div>`;
-  h+=legenda(`<p>La scheda riporta le divise e il materiale in possesso dell'atleta e le sue richieste aperte. <b>Consegna diretta</b> registra una consegna senza passare da una richiesta; <b>Nuova richiesta</b> aggiunge una richiesta; <b>Modifica atleta</b> consente di cambiare i dati, la squadra, il collegamento con la scheda di un'altra squadra e di eliminare l'atleta.</p>
+  h+=legenda(`<p>La scheda riporta le divise e il materiale in possesso dell'atleta e le sue richieste aperte. <b>Consegna diretta</b> registra una consegna senza passare da una richiesta; <b>Nuova richiesta</b> aggiunge una richiesta; <b>Modifica atleta</b> consente di cambiare i dati, la squadra e il collegamento con la scheda di un'altra squadra; <b>Elimina atleta…</b> la toglie dall'archivio.</p>
     <p>Su ogni divisa, <b>Modifica</b> corregge taglia, numero e lotto (per esempio se risultava una M e in realtà è una S), <b>Segna da cambiare</b> la indica come da sostituire e <b>Restituita</b> ne registra il rientro; sul materiale, <b>Restituito</b> registra il rientro dei pezzi.</p>`,vociDivise(true));
   h+=`<h2>Divise</h2>`;
   if(!divs.length)h+=`<div class="list"><p class="empty">Nessuna divisa assegnata. Si assegna con una nuova richiesta oppure con la consegna diretta.</p></div>`;
@@ -1130,7 +1155,7 @@ function vAtleta(id){
   if(!req.length)h+=`<div class="list"><p class="empty">Nessuna richiesta aperta.</p></div>`;
   else h+=`<div class="list">`+req.map(rid=>reqRow(rid,false)).join('')+`</div>`;
   h+=`<h2>Materiale consegnato</h2>`;
-  if(!dot.length)h+=`<div class="list"><p class="empty">Nessuna consegna registrata finora.</p></div>`;
+  if(!dot.length)h+=`<div class="list"><p class="empty">Nessun materiale in dotazione.</p></div>`;
   else h+=`<div class="list">`+dot.map(([k,v])=>{const [ar,tg]=k.split('|');return`<div class="item"><div class="main"><div class="name">${esc(artLabel(ar))}</div><div class="meta">${tg==='UNICA'?'Taglia unica':'Taglia '+esc(tg)} · ${v} ${v===1?'pezzo':'pezzi'}</div></div>
     <div class="right"><button type="button" class="btn small" data-act="rientroMat" data-id="${esc(id)}" data-art="${esc(ar)}" data-tg="${esc(tg)}">Restituito</button></div></div>`}).join('')+`</div>`;
   return h;
@@ -1232,23 +1257,26 @@ function vMagazzino(){
   const D=derive();
   // La barra e' identica nelle tre viste: linguette, opzione, pulsante. Cosi'
   // niente si sposta passando dall'una all'altra.
+  if(S.ui.magTab==='storico')return vStorico();
   const opzione=S.ui.magTab==='divise'
     ? `<input type="text" id="f_nDiv" class="filtroNum" maxlength="2" pattern="[0-9]*" placeholder="n. maglia" value="${esc(S.ui.nDiv)}" data-bind="nDiv" aria-label="Numero di maglia" inputmode="numeric">
        <label class="check"><input type="checkbox" id="c_inUso" data-act="toggleInUse" ${S.ui.showInUse?'checked':''}> Mostra anche le divise in uso</label>`
     : `<label class="check"><input type="checkbox" id="c_vecchie" data-act="toggleOld" ${S.ui.showOld?'checked':''}> Mostra le stagioni precedenti</label>`;
   const azione=S.ui.magTab==='divise'
     ? '<button type="button" class="btn" data-act="newLotto">Aggiungi lotto</button><button type="button" class="btn" data-act="newDivisa">Aggiungi divisa</button>'
-    : '<button type="button" class="btn" data-act="newArticolo">Aggiungi articolo</button>';
+    : `${window.__APP?'<span class="gruppoFoglio">Riconto <button type="button" class="btn small" data-act="scaricaRiconto">Scarica</button><button type="button" class="btn small" data-act="caricaRiconto">Carica</button></span>':''}<button type="button" class="btn" data-act="newArticolo">Aggiungi articolo</button>`;
   let h=`<h1>Magazzino</h1><div class="row-actions barraMag"><div class="seg" role="group" aria-label="Vista">
     <button type="button" id="t_magTab_divise" data-act="magTab" data-v="divise" aria-pressed="${S.ui.magTab==='divise'}">Divise</button>
-    <button type="button" id="t_magTab_materiale" data-act="magTab" data-v="materiale" aria-pressed="${S.ui.magTab!=='divise'}">Materiale</button></div>
+    <button type="button" id="t_magTab_materiale" data-act="magTab" data-v="materiale" aria-pressed="${S.ui.magTab==='materiale'}">Materiale</button>
+    <button type="button" id="t_magTab_storico" data-act="magTab" data-v="storico" aria-pressed="${S.ui.magTab==='storico'}">Storico e ordini</button></div>
     <span class="opzMag">${opzione}</span>${azione}</div>`;
   h+=S.ui.magTab==='divise'
     ?legenda(`<p>Le divise da gara, per lotto e per taglia: ogni riquadro rappresenta una maglia, con numero e taglia. Selezionando un riquadro si modificano taglia, numero, lotto e nota; una maglia in magazzino può inoltre essere segnata fuori uso (resta in magazzino ma non viene mai assegnata) oppure dismessa (esce definitivamente dal magazzino). Normalmente sono visibili solo le maglie disponibili: l'opzione in alto mostra anche quelle in uso.</p>
     <p>Ogni lotto indica il tipo (divise da gara o maglie da libero) e le squadre che lo utilizzano. <b>Aggiungi lotto</b> crea un lotto nuovo; <b>Modifica lotto</b> ne cambia nome, tipo e squadre. Un lotto senza maglie si può eliminare.</p>`,
       vociDivise(true))
-    :legenda(`<p>Gli articoli con le rispettive taglie. <b>Totale</b> = consegnati + in magazzino. <b>Magazzino finale</b> = in magazzino − prenotati + ordinati, cioè la giacenza prevista dopo la consegna delle richieste e l'arrivo degli ordini.</p>
-      <p>Selezionando una riga si apre la finestra dell'articolo, dove in cima si sceglie cosa registrare: <b>Arrivo</b> dei pezzi, <b>Inventario</b> per correggere la giacenza con i pezzi contati, <b>Dismessi</b> per i pezzi non più utilizzabili, <b>Ordine</b> per la quantità ordinata al fornitore. Compaiono solo le caselle che servono e un solo pulsante.</p>`,
+    :legenda(`<p>Gli articoli con le rispettive taglie. <b>Totale</b> = consegnati + in magazzino. <b>Magazzino finale</b> = in magazzino − prenotati − da ordinare + ordinati, cioè la giacenza prevista dopo la consegna di tutte le richieste e l'arrivo degli ordini.</p>
+      <p>Selezionando una riga si apre la finestra dell'articolo, dove in cima si sceglie cosa registrare: <b>Arrivo</b> dei pezzi, <b>Inventario</b> per correggere la giacenza con i pezzi contati, <b>Dismessi</b> per i pezzi non più utilizzabili, <b>Ordine</b> per la quantità ordinata al fornitore. Compaiono solo le caselle che servono e un solo pulsante.</p>
+      <p><b>Riconto → Scarica</b> salva un foglio Excel con ogni articolo e taglia e i pezzi che risultano: si scrivono i pezzi contati nella colonna «Contati» (vuota = taglia non contata) e con <b>Riconto → Carica</b> ogni differenza diventa una rettifica d'inventario, con data e nota. Prima di registrare il programma mostra l'elenco delle differenze.</p>`,
       [['<span class="pill bad">−3</span>','mancano 3 pezzi per coprire le richieste'],
       ['<span class="neg" style="color:var(--bad);font-weight:700">−2</span>','giacenza negativa: da verificare con un inventario'],
       ['<span class="pill">fuori distribuzione</span>','resta in inventario ma non viene più proposto']]);
@@ -1303,11 +1331,11 @@ function vMovimenti(){
     .sort((a,b)=>(b[1].ts||0)-(a[1].ts||0));
   const tot=ids.length;if(!S.ui.mvAll)ids=ids.slice(0,150);
   let h=`<h1>Movimenti</h1><div class="row-actions"><button type="button" class="btn yellow" data-act="newMov">Consegna a staff ed esterni</button>${window.__APP?'<button type="button" class="btn" data-act="scaricaMov">Scarica il registro</button>':''}</div>
-  ${legenda(`<p>Il registro di tutte le entrate e le uscite di magazzino, dalla più recente: consegne, rientri, carichi e rettifiche. Le consegne registrate nelle altre schermate compaiono qui automaticamente.</p>
-    <p><b>Consegna a staff ed esterni</b> registra il materiale consegnato ad allenatori, dirigenti o esterni, o rientrato da loro, indicandone il nome. Le consegne alle atlete si registrano dalla loro scheda, da Assegnazioni o dal modulo di distribuzione. <b>Annulla</b> ripristina la situazione precedente del magazzino.</p>`,
+  ${legenda(`<p>Il registro di tutte le entrate e le uscite di magazzino, dalla più recente: consegne, rientri, arrivi e rettifiche. Le consegne registrate nelle altre schermate compaiono qui automaticamente.</p>
+    <p><b>Consegna a staff ed esterni</b> registra il materiale consegnato ad allenatori, dirigenti o esterni, o rientrato da loro, indicandone il nome. Le consegne agli atleti si registrano dalla loro scheda, da Assegnazioni o dal modulo di distribuzione. <b>Annulla</b> ripristina la situazione precedente del magazzino.</p>`,
     [['<span class="pill blue">consegna</span>','uscita dal magazzino'],
      ['<span class="pill yellow">rientro</span>','rientro in magazzino'],
-     ['<span class="pill ok">carico</span>','arrivo dal fornitore'],
+     ['<span class="pill ok">arrivo</span>','merce arrivata dal fornitore'],
      ['<span class="pill">rettifica</span>','correzione della giacenza dopo un inventario'],
      ['<span class="pill">già in possesso</span>','capo che l’atleta aveva già, segnato dal modulo di distribuzione: la giacenza non cambia'],
      ['<span class="pill bad">dismesso</span>','materiale non più utilizzabile: esce dal magazzino']])}
@@ -1518,6 +1546,189 @@ function vRiepilogo(){
    posto. Erano due schermate, ma sono lo stesso oggetto: una diceva le taglie,
    l'altra quante ne restavano, e per cambiare una taglia bisognava cambiare
    schermata. */
+function vStorico(){
+  const D=derive();const tutte=stagioniNote(D);const ora=D.set.stagione||'';
+  const stag=tutte.includes(S.ui.stagStorico)?S.ui.stagStorico:ora;
+  const corrente=stag===ora;
+  const righe=storicoStagione(D,stag);
+  const voci=Object.values(righe).map(x=>({...x,...(corrente?propostaOrdine(D,x):{})}))
+    .filter(x=>x.prima||x.arrivate||x.distr||x.corr||x.ora||(corrente&&(x.aperte||x.inArrivo)));
+  const sel=`<select id="f_stagStorico" data-bind="stagStorico" aria-label="Stagione">${tutte.map(t=>`<option${t===stag?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
+  let h=`<h1>Magazzino</h1><div class="row-actions barraMag"><div class="seg" role="group" aria-label="Vista">
+    <button type="button" id="t_magTab_divise" data-act="magTab" data-v="divise" aria-pressed="false">Divise</button>
+    <button type="button" id="t_magTab_materiale" data-act="magTab" data-v="materiale" aria-pressed="false">Materiale</button>
+    <button type="button" id="t_magTab_storico" data-act="magTab" data-v="storico" aria-pressed="true">Storico e ordini</button></div>
+    <span class="opzMag">${sel}</span>${corrente?'<button type="button" class="btn primary" data-act="salvaOrdine">Salva come ordine</button>':''}<button type="button" class="btn" data-act="scaricaStorico">Scarica in Excel</button></div>`;
+  h+=legenda(`<p>Per ogni articolo e taglia del materiale, i conti della stagione scelta in alto: <b>rimaste dalla stagione prima</b> (nella prima stagione, i pezzi di partenza), <b>arrivate</b> (anche gli ordini a metà stagione), <b>a disposizione</b> (la somma delle due), <b>distribuite</b> (consegne meno rientri, ad atleti, staff ed esterni) e <b>rimaste ora</b>. Per gli articoli con inventari o pezzi dismessi compare anche la colonna <b>correzioni</b>. Le divise da gara non sono comprese: si contano una per una in Divise.</p>
+    <p>Nella stagione in corso <b>da ordinare</b> propone quanto ordinare per la prossima: distribuite + richieste ancora aperte + scorta − rimaste ora − già in arrivo. La scorta è il ${esc(percScorta(D))}% delle distribuite (almeno un pezzo per le taglie usate; si cambia in Impostazioni). I numeri si possono correggere; <b>Salva come ordine</b> li aggiunge agli ordinati al fornitore, che si riducono automaticamente quando si registra l'arrivo della merce. <b>Scarica in Excel</b> salva la tabella con i numeri scritti.</p>`);
+  if(!voci.length)return h+`<div class="list"><p class="empty">Nessun movimento di materiale registrato in questa stagione.</p></div>`;
+  const perArt={};for(const x of voci)(perArt[x.art]=perArt[x.art]||[]).push(x);
+  const nomi=Object.keys(perArt).sort((a,b)=>artLabel(a).localeCompare(artLabel(b),'it'));
+  const n=v=>v?String(v):'—';
+  for(const a of nomi){
+    const ts=perArt[a].sort((x,y)=>szIdx(x.tg)-szIdx(y.tg)||x.tg.localeCompare(y.tg));
+    const tot=k=>ts.reduce((s2,x)=>s2+(Number(x[k])||0),0);
+    const conCorr=ts.some(x=>x.corr);
+    const testa=`<th>Taglia</th><th class="num">Rimaste dalla stagione prima</th><th class="num">Arrivate</th><th class="num">A disposizione</th><th class="num">Distribuite</th>${conCorr?'<th class="num">Correzioni</th>':''}<th class="num">Rimaste ora</th>${corrente?'<th class="num">Richieste aperte</th><th class="num">Già in arrivo</th><th class="num">Scorta</th><th class="num">Da ordinare</th>':''}`;
+    const riga=x=>{const k=D.key(x.art,x.tg);const scritto=S.ui.ordEdit&&S.ui.ordEdit[k]!=null?S.ui.ordEdit[k]:x.da;
+      return `<tr><td>${x.tg==='UNICA'?'unica':esc(x.tg)}</td><td class="num">${n(x.prima)}</td><td class="num">${n(x.arrivate)}</td><td class="num"><b>${n(x.disp)}</b></td><td class="num">${n(x.distr)}</td>${conCorr?`<td class="num">${x.corr?(x.corr>0?'+':'')+x.corr:'—'}</td>`:''}<td class="num${x.ora<0?' neg':''}"><b>${n(x.ora)}</b></td>${corrente?`<td class="num">${n(x.aperte)}</td><td class="num">${n(x.inArrivo)}</td><td class="num">${n(x.scorta)}</td><td class="num"><input type="number" class="ordIn" min="0" max="9999" inputmode="numeric" data-k="${esc(k)}" value="${esc(scritto)}" aria-label="Da ordinare ${esc(artLabel(x.art))} ${esc(x.tg)}">${String(scritto)!==String(x.da)?`<small class="propOrig">proposta ${x.da}</small>`:''}</td>`:''}</tr>`};
+    const piede=ts.length>1?`<tfoot><tr><td>Totale</td><td class="num">${n(tot('prima'))}</td><td class="num">${n(tot('arrivate'))}</td><td class="num"><b>${n(tot('disp'))}</b></td><td class="num">${n(tot('distr'))}</td>${conCorr?`<td class="num">${tot('corr')||'—'}</td>`:''}<td class="num"><b>${n(tot('ora'))}</b></td>${corrente?`<td class="num">${n(tot('aperte'))}</td><td class="num">${n(tot('inArrivo'))}</td><td class="num">${n(tot('scorta'))}</td><td class="num">${n(ts.reduce((s2,x)=>{const k=D.key(x.art,x.tg);const w2=S.ui.ordEdit&&S.ui.ordEdit[k];return s2+(w2!=null?Math.max(0,Math.round(Number(w2))||0):x.da)},0))}</td>`:''}</tr></tfoot>`:'';
+    h+=`<div class="group-head"><h2>${esc(artLabel(a))}</h2></div><div class="table-wrap"><table class="storico"><thead><tr>${testa}</tr></thead><tbody>${ts.map(riga).join('')}</tbody>${piede}</table></div>`}
+  return h}
+/* I numeri scritti a mano nella colonna Da ordinare restano finche' non si
+   salva: la pagina si ridisegna a ogni modifica dell'archivio. */
+document.addEventListener('input',e=>{const el=e.target;if(!el.classList||!el.classList.contains('ordIn'))return;
+  (S.ui.ordEdit=S.ui.ordEdit||{})[el.dataset.k]=el.value});
+function righeStorico(){
+  const D=derive();const ora=D.set.stagione||'';const tutte=stagioniNote(D);
+  const stag=tutte.includes(S.ui.stagStorico)?S.ui.stagStorico:ora;const corrente=stag===ora;
+  const v=Object.values(storicoStagione(D,stag)).map(x=>({...x,...(corrente?propostaOrdine(D,x):{})}))
+    .filter(x=>x.prima||x.arrivate||x.distr||x.corr||x.ora||(corrente&&(x.aperte||x.inArrivo)))
+    .sort((x,y)=>artLabel(x.art).localeCompare(artLabel(y.art),'it')||szIdx(x.tg)-szIdx(y.tg));
+  for(const x of v){const k=D.key(x.art,x.tg);
+    // una casella svuotata vuol dire «niente», non «la proposta»
+    if(corrente){const w2=S.ui.ordEdit&&S.ui.ordEdit[k];x.scritto=w2!=null?Math.max(0,Math.round(Number(w2))||0):x.da}}
+  return {D,stag,corrente,v}}
+async function salvaOrdine(){
+  const {D,corrente,v}=righeStorico();if(!corrente)return;
+  const da=v.filter(x=>x.scritto>0);
+  if(!da.length){toast('Nessun pezzo da ordinare');return}
+  const pezzi=da.reduce((s2,x)=>s2+x.scritto,0);
+  if(!await chiedi(`Aggiungere agli ordinati al fornitore ${pezzi} ${pezzi===1?'pezzo':'pezzi'} in ${da.length} ${da.length===1?'taglia':'taglie'}? Risulteranno in arrivo e si ridurranno automaticamente quando si registra l’arrivo della merce.`,{si:'Salva come ordine'}))return;
+  const ok=await w(async()=>{for(const x of da){
+    const righe=Object.entries(S.materiale).filter(([,m])=>m.articolo===x.art&&m.taglia===x.tg);
+    const prima=(D.stock[D.key(x.art,x.tg)]||{}).ordinati||0;
+    if(!righe.length)await S.db.collection('materiale').add({articolo:x.art,taglia:x.tg,iniziale:0,precedente:false,ordinati:prima+x.scritto});
+    else{for(const [rid2,m] of righe.slice(1))if(Number(m.ordinati))await S.db.doc('materiale/'+rid2).update({ordinati:0});
+      await S.db.doc('materiale/'+righe[0][0]).update({ordinati:prima+x.scritto})}}});
+  if(ok){S.ui.ordEdit={};toast(`Ordine salvato: ${pezzi} ${pezzi===1?'pezzo':'pezzi'} in arrivo`);render()}}
+async function scaricaStorico(){
+  const {D,stag,corrente,v}=righeStorico();
+  if(!v.length){toast('Nessun dato da scaricare');return}
+  if(!window.__APP){toast('Il foglio si scarica dal programma installato');return}
+  const col=['Articolo','Taglia','Rimaste dalla stagione prima','Arrivate','A disposizione','Distribuite','Correzioni','Rimaste ora',...(corrente?['Richieste aperte','Già in arrivo','Scorta','Da ordinare']:[])];
+  const righe=v.map(x=>[artLabel(x.art),x.tg==='UNICA'?'unica':x.tg,x.prima,x.arrivate,x.disp,x.distr,x.corr,x.ora,...(corrente?[x.aperte,x.inArrivo,x.scorta,x.scritto]:[])].map(c=>String(c??'')));
+  try{
+    const dove=await window.__APP.scegliDoveSalvare(`storico-ordini-${String(stag).replace(/[^0-9A-Za-z]+/g,'-')}.xlsx`);
+    if(!dove)return;
+    await window.__APP.scriviExcel(dove,'Storico e ordini',col,righe,
+      guidaPerExcel([`STORICO E ORDINI — stagione ${stag}, materiale per articolo e taglia.`,'',
+        corrente?`Da ordinare = distribuite + richieste aperte + scorta (${percScorta(D)}% delle distribuite) - rimaste ora - già in arrivo, con le correzioni scritte a mano.`:'Stagione chiusa: solo da consultare.',
+        'Il foglio è solo da consultare: non si ricarica.']));
+    toast('Foglio salvato');
+  }catch(e){toast('Scrittura del file non riuscita: '+e)}}
+/* Il foglio del riconto (la responsabile del magazzino della societa', 05/10/2026: "tra due tre settimane riconto il
+   magazzino", il suo punto zero). Prima si poteva correggere solo una taglia
+   alla volta da «Inventario». Qui: si scarica un foglio con ogni articolo e
+   taglia del materiale e i pezzi che risultano, si scrivono i pezzi contati e
+   lo si ricarica. Ogni differenza diventa una rettifica, tutte nella stessa
+   operazione (si annullano insieme).
+   La differenza si calcola sul numero scritto nel foglio («Nel programma» al
+   momento dello scarico), non sulla giacenza di adesso: le consegne fatte fra
+   il conteggio e il caricamento restano valide e non vengono cancellate.
+   Una casella «Contati» vuota vuol dire «non contato»: la riga si ignora.
+   Le divise no: sono capi numerati e si controllano una per una. */
+const RICONTO_COLONNE=['Articolo','Taglia','Nel programma','Contati','Foglio del'];
+function righeRiconto(D){
+  const k=new Map();
+  for(const a of D.set.articoli||[]){if(D.conNumero(a.nome))continue;for(const t of a.taglie||[])k.set(D.key(a.nome,t),[a.nome,t])}
+  for(const [kk,q] of Object.entries(D.stock)){const [a,t]=kk.split('|');if(!D.conNumero(a)&&(q.ora||k.has(kk)))k.set(kk,[a,t])}
+  return [...k.values()].map(([a,t])=>({art:a,tg:t,ora:(D.stock[D.key(a,t)]||{ora:0}).ora}))
+    .sort((x,y)=>artLabel(x.art).localeCompare(artLabel(y.art),'it')||szIdx(x.tg)-szIdx(y.tg))}
+async function scaricaRiconto(){
+  if(!window.__APP){toast('Il foglio si scarica dal programma installato');return}
+  const D=derive();const v=righeRiconto(D);
+  if(!v.length){toast('Nessun articolo di materiale da contare');return}
+  try{
+    const dove=await window.__APP.scegliDoveSalvare(`riconto-magazzino-${today()}.xlsx`);
+    if(!dove)return;
+    const n=new Date();const d2=x=>String(x).padStart(2,'0');
+    const codice=`${fmtDate(today())} ${d2(n.getHours())}:${d2(n.getMinutes())}:${d2(n.getSeconds())}`;
+    await window.__APP.scriviExcel(dove,'Riconto',RICONTO_COLONNE,
+      v.map(x=>[artLabel(x.art),x.tg==='UNICA'?'unica':x.tg,String(x.ora),'',codice]),
+      guidaPerExcel(['RICONTO DEL MAGAZZINO — materiale, un articolo e una taglia per riga.','',
+        `Situazione al ${fmtDate(today())}, stagione ${D.set.stagione||''}.`,'',
+        'Come si compila:',
+        'Contati  il numero di pezzi trovati in magazzino per quella taglia.',
+        '     Se una taglia non è stata contata si lascia vuota: viene ignorata.',
+        '     Se non c\u2019è nessun pezzo si scrive 0.',
+        'Nel programma  i pezzi che risultavano allo scarico del foglio: non si modifica.',
+        '',
+        'Al caricamento (Magazzino → Materiale → Carica riconto) ogni differenza fra',
+        '«Contati» e «Nel programma» diventa una rettifica d\u2019inventario, con data e nota.',
+        'Le consegne registrate dopo lo scarico del foglio restano valide.',
+        'Le divise da gara non sono nel foglio: si controllano una per una in Divise.']),
+      [{aiuto:'Solo informativa: il nome dell\u2019articolo.'},{aiuto:'Solo informativa: la taglia.'},
+       {aiuto:'Solo informativa: i pezzi che risultavano allo scarico. Non va modificata.'},
+       {intero:[0,99999],aiuto:'I pezzi contati in magazzino. Vuota = taglia non contata. Nessun pezzo = 0.'},
+       {aiuto:'Solo informativa: data e ora dello scarico. Serve a non registrare due volte lo stesso riconto.'}],
+      ['Solo informative','Solo informative','Solo informative','Da compilare','Solo informative']);
+    toast('Foglio del riconto salvato');
+  }catch(e){toast('Scrittura del file non riuscita: '+e)}}
+/* Legge il foglio e dice cosa cambierebbe: righe = celle del foglio. */
+function leggiRiconto(D,righe){
+  const iT=righe.slice(0,6).findIndex(r=>{const k=r.map(KEY);return k.includes(KEY('Articolo'))&&k.includes(KEY('Contati'))});
+  const esito={problemi:[],avvisi:[],cambi:[],contati:0,uguali:0};
+  if(iT<0){esito.problemi.push('Il foglio non sembra quello del riconto: mancano le colonne «Articolo» e «Contati».');return esito}
+  const tit=righe[iT].map(KEY);const c=n=>tit.indexOf(KEY(n));
+  const cA=c('Articolo'),cT=c('Taglia'),cP=c('Nel programma'),cC=c('Contati'),cF=c('Foglio del');
+  const visti=new Set();
+  // le taglie gia' rettificate con questo stesso foglio
+  const fatte=new Set(Object.values(S.movimenti).filter(m=>m.tipo==='RETTIFICA'&&m.riconto).map(m=>m.riconto+'|'+D.key(m.articolo,m.taglia)));
+  righe.slice(iT+1).forEach((r,i)=>{const nr=iT+i+2;
+    const cont=String(r[cC]??'').trim();if(!cont)return;
+    const nomeA=String(r[cA]??'').trim();const a=articoloDaNome(D,nomeA);
+    if(!a){esito.problemi.push(`Riga ${nr}: articolo «${nomeA}» non trovato`);return}
+    if(D.conNumero(a.nome)){esito.problemi.push(`Riga ${nr}: ${artLabel(a.nome)} ha il numero di maglia: le divise non si ricontano dal foglio`);return}
+    const scritta=String(r[cT]??'').trim();
+    // «unica» o vuota vale solo per un articolo senza taglie (o che ha gia' la
+    // riga di taglia unica): se no nasceva una giacenza in una taglia inesistente.
+    const unica=!(a.taglie||[]).length||!!D.stock[D.key(a.nome,'UNICA')];
+    const tg=KEY(scritta)===KEY('unica')||!scritta?(unica?'UNICA':''):(tagliaArticolo(a,scritta)||(D.stock[D.key(a.nome,scritta)]?scritta:''));
+    if(!tg){esito.problemi.push(scritta?`Riga ${nr}: taglia «${scritta}» non prevista per ${artLabel(a.nome)}`:`Riga ${nr}: manca la taglia per ${artLabel(a.nome)}`);return}
+    const n=Number(cont.replace(',','.'));
+    if(!Number.isInteger(n)||n<0){esito.problemi.push(`Riga ${nr}: «${cont}» non è un numero di pezzi (un intero, zero o più)`);return}
+    const k=D.key(a.nome,tg);
+    if(visti.has(k)){esito.problemi.push(`Riga ${nr}: ${artLabel(a.nome)} ${tg} compare due volte: vale la prima riga`);return}
+    visti.add(k);esito.contati++;
+    const codice=cF>=0?String(r[cF]??'').trim():'';
+    if(codice&&fatte.has(codice+'|'+k)){esito.uguali++;esito.avvisi.push(`${artLabel(a.nome)} ${tg==='UNICA'?'':tg}: già rettificata con questo foglio, ignorata`);return}
+    const ora=(D.stock[k]||{ora:0}).ora;
+    const pS=String(r[cP]??'').trim();const prima=pS===''||!Number.isFinite(Number(pS))?ora:Number(pS);
+    // Lo stesso foglio caricato una seconda volta (per esempio dopo aver
+    // corretto una riga rifiutata): la giacenza e' gia' il numero contato, la
+    // rettifica non si ripete. Prima si applicava due volte.
+    if(prima!==ora&&ora===n){esito.uguali++;esito.avvisi.push(`${artLabel(a.nome)} ${tg==='UNICA'?'':tg}: ne risultano già ${n}, come i contati: rettifica già registrata, ignorata`);return}
+    if(prima!==ora)esito.avvisi.push(`${artLabel(a.nome)} ${tg==='UNICA'?'':tg}: dallo scarico del foglio la giacenza è passata da ${prima} a ${ora}; la differenza contata (${n-prima>0?'+':''}${n-prima}) si applica a quella attuale`);
+    if(n===prima){esito.uguali++;return}
+    esito.cambi.push({art:a.nome,tg,prima,n,delta:n-prima,codice})});
+  return esito}
+async function caricaRiconto(){
+  if(!window.__APP){toast('Il foglio si carica dal programma installato');return}
+  let file,righe;
+  try{file=await window.__APP.scegliDaAprire()}catch(e){toast('Apertura della finestra non riuscita: '+e);return}
+  if(!file)return;
+  try{righe=await window.__APP.leggiExcel(file)}catch(e){toast('Lettura del file non riuscita: '+e);return}
+  const D=derive();const e=leggiRiconto(D,righe);
+  if(!e.cambi.length){mostraEsitoExcel('Riconto del magazzino',e,e.contati?`${e.contati} ${e.contati===1?'taglia contata':'taglie contate'}, nessuna differenza`:'nessuna taglia contata');return}
+  const r1=['Foglio «Riconto del magazzino»: controllo completato.','',
+    `Taglie contate: ${e.contati}; uguali al programma: ${e.uguali}; con differenze: ${e.cambi.length}.`,'',
+    'Rettifiche da registrare:',
+    ...e.cambi.slice(0,12).map(x=>`• ${artLabel(x.art)} ${x.tg==='UNICA'?'':x.tg}: ${x.prima} → ${x.n} (${x.delta>0?'+':''}${x.delta})`)];
+  if(e.cambi.length>12)r1.push(`• …e altre ${e.cambi.length-12}`);
+  if(e.problemi.length)r1.push('',`Righe non caricate: ${e.problemi.length}`,...e.problemi.slice(0,4).map(x=>'• '+x));
+  if(e.avvisi.length)r1.push('',`Avvisi: ${e.avvisi.length}`,...e.avvisi.slice(0,3).map(x=>'• '+x));
+  r1.push('','Registrare le rettifiche?');
+  if(!await chiedi(r1.join('\n'),{si:'Registra rettifiche'}))return;
+  const nota=`Riconto del ${fmtDate(today())}`;
+  const r=await scriviConRete('Riconto del magazzino',()=>insieme(async()=>{
+    for(const x of e.cambi)await mov({tipo:'RETTIFICA',articolo:x.art,taglia:x.tg,qta:x.delta,note:`${nota}: contati ${x.n}, risultavano ${x.prima}`,...(x.codice?{riconto:x.codice}:{})});
+    return e}));
+  if(!r)return;
+  if(r.errore){mostraEsitoExcel('Riconto del magazzino',{problemi:[interrotto(r.errore)],avvisi:[]},'caricamento interrotto');return}
+  const piu=e.cambi.filter(x=>x.delta>0).reduce((s2,x)=>s2+x.delta,0),meno=e.cambi.filter(x=>x.delta<0).reduce((s2,x)=>s2-x.delta,0);
+  mostraEsitoExcel('Riconto del magazzino',{problemi:e.problemi,avvisi:[...e.cambi.map(x=>`${artLabel(x.art)} ${x.tg==='UNICA'?'':x.tg}: ${x.prima} → ${x.n}`),...e.avvisi]},
+    `${e.cambi.length} ${e.cambi.length===1?'rettifica registrata':'rettifiche registrate'} (${piu?'+'+piu:''}${piu&&meno?', ':''}${meno?'−'+meno:''} pezzi)`)}
 function vMateriale(){
   const D=derive();const arts=D.set.articoli||[];
   // Taglie che compaiono davvero: quelle dichiarate sull'articolo piu' quelle
@@ -1577,7 +1788,7 @@ function vMateriale(){
       let unica='';
       if(!conNum&&ts.length===1){
         const c=conti(ts[0]);
-        unica=`<span class="artUnica" data-act="matRow" data-art="${esc(a.nome)}" data-tg="${esc(ts[0])}" tabindex="0" role="button" title="Registrare un carico, correggere la giacenza o dismettere dei pezzi">
+        unica=`<span class="artUnica" data-act="matRow" data-art="${esc(a.nome)}" data-tg="${esc(ts[0])}" tabindex="0" role="button" title="Registrare un arrivo, correggere la giacenza, dismettere dei pezzi o segnare un ordine">
         <span><small>Totale</small><b>${c.tot||'—'}</b></span>
         <span><small>Consegnati</small><b>${c.fuori||'—'}</b></span>
         <span><small>In magazzino</small><b>${c.st}</b></span>
@@ -1602,7 +1813,7 @@ function vMateriale(){
         h+=`<div class="table-wrap"><table><thead><tr><th>Taglia</th><th class="num">Totale</th><th class="num">Consegnati</th><th class="num">In magazzino</th><th class="num">Prenotati</th><th class="num">Ordinati</th><th class="num">Magazzino finale</th><th></th></tr></thead><tbody>`;
         for(const t of ts){
           const c=conti(t);
-          h+=`<tr class="click" data-act="matRow" data-art="${esc(a.nome)}" data-tg="${esc(t)}" tabindex="0" title="Registrare un carico, correggere la giacenza o dismettere dei pezzi">
+          h+=`<tr class="click" data-act="matRow" data-art="${esc(a.nome)}" data-tg="${esc(t)}" tabindex="0" title="Registrare un arrivo, correggere la giacenza, dismettere dei pezzi o segnare un ordine">
           <td>${t==='UNICA'?'unica':esc(t)}${a.codice?`<small class="codTg">${esc(artCodiceTaglia(a.nome,t))}</small>`:''}</td><td class="num meta">${c.tot||''}</td><td class="num meta">${c.fuori||''}</td>
           <td class="num${c.st<0?' neg':''}">${c.st}</td><td class="num">${c.p||''}</td><td class="num meta">${c.ord||''}</td>
           <td class="num">${cella(c)}</td>
@@ -1731,10 +1942,12 @@ function vManuale(){
     <p><b>Squadre</b> — due schede. <i>Atleti</i>: una riga per squadra, con nome, numero di atleti, stato delle impostazioni e i pulsanti <b>Consegna o ritira a tutti</b>, <b>Scarica foglio</b> e <b>Impostazioni</b> (nome, lotto, numeri in comune, ordine di distribuzione, «in distribuzione» ed eliminazione, possibile solo per una squadra senza atleti); con poco spazio i pulsanti si accorciano in «A tutti», «Foglio» e ⚙; con <b>+</b> si visualizzano gli atleti, modificabili direttamente sulla riga, e con <b>Apri</b> si accede alla loro scheda. <i>Riepilogo</i>: la dotazione attuale di ogni atleta e i numeri in uso in ciascuna squadra. Le due schede hanno gli stessi filtri (nome, squadra, numero di maglia) e gli stessi pulsanti <b>Aggiungi atleta</b> e <b>Aggiungi squadra</b>. Gli atleti la cui squadra non è più nell'elenco compaiono in fondo, con il pulsante per aggiungerla.</p>
     <p><b>Scheda dell'atleta</b> — divise, materiale e richieste dell'atleta, con i pulsanti <b>Consegna diretta</b>, <b>Nuova richiesta</b> e <b>Modifica atleta</b>. Ogni richiesta si modifica con ✎ e si elimina con ✕. Una nuova richiesta indica articolo e taglia e, per le divise, il tipo (divisa della squadra o maglia da libero) e l'eventuale numero desiderato.</p>
     <p><b>Assegnazioni</b> — due schede. <i>Richieste</i>: le richieste aperte, raggruppate per squadra, con il capo proposto dal programma e i filtri per squadra, esito, articolo e numero. <i>Da ordinare</i>: i pezzi da ordinare al fornitore, per articolo e taglia, al netto di quelli già ordinati.</p>
-    <p><b>Magazzino</b> — due schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo, <b>Aggiungi lotto</b> e <b>Modifica lotto</b> gestiscono i lotti e le squadre che li usano. Selezionando una maglia in magazzino, <b>Segna fuori uso</b> la lascia in magazzino (grigia e barrata) senza che venga mai assegnata, <b>Dismetti</b> la toglie definitivamente dal magazzino. <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − mancanti + ordinati). Selezionando una riga si apre la finestra dell'articolo: in cima si sceglie <b>Arrivo</b>, <b>Inventario</b>, <b>Dismessi</b> oppure <b>Ordine</b>, e sotto compaiono solo le caselle che servono, con un solo pulsante. Eventuali incongruenze sono segnalate in cima alla scheda.</p>
-    <p><b>Movimenti</b> — il registro di consegne, rientri, carichi e rettifiche, dal più recente; vengono mostrati gli ultimi 150, con il pulsante per visualizzarli tutti. <b>Consegna a staff ed esterni</b> registra il materiale dato ad allenatori, dirigenti o esterni.</p>
+    <p><b>Magazzino</b> — tre schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo, <b>Aggiungi lotto</b> e <b>Modifica lotto</b> gestiscono i lotti e le squadre che li usano. Selezionando una maglia in magazzino, <b>Segna fuori uso</b> la lascia in magazzino (grigia e barrata) senza che venga mai assegnata, <b>Dismetti</b> la toglie definitivamente dal magazzino. <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − da ordinare + ordinati). Selezionando una riga si apre la finestra dell'articolo: in cima si sceglie <b>Arrivo</b>, <b>Inventario</b>, <b>Dismessi</b> oppure <b>Ordine</b>, e sotto compaiono solo le caselle che servono, con un solo pulsante. In alto, <b>Riconto</b> scarica e ricarica il foglio per contare tutto il magazzino in una volta (vedi sotto). Eventuali incongruenze sono segnalate in cima alla scheda. <i>Storico e ordini</i>: i conti di ogni stagione e la proposta d'ordine per la successiva (vedi sotto).</p>
+    <p><b>Movimenti</b> — il registro di consegne, rientri, arrivi e rettifiche, dal più recente; vengono mostrati gli ultimi 150, con il pulsante per visualizzarli tutti. <b>Consegna a staff ed esterni</b> registra il materiale dato ad allenatori, dirigenti o esterni.</p>
+    <p><b>Riconto del magazzino</b> — in Magazzino → Materiale, <b>Riconto → Scarica</b> salva un foglio con ogni articolo e taglia e i pezzi che risultano; si scrivono i pezzi contati (vuota = non contata, 0 = nessun pezzo) e con <b>Riconto → Carica</b> le differenze diventano rettifiche d'inventario, registrate insieme e annullabili dall'esito. La differenza si calcola sul numero del foglio, quindi le consegne fatte dopo lo scarico restano valide. Le divise da gara si controllano una per una in Divise.</p>
+    <p><b>Storico e ordini</b> — in Magazzino, la terza scheda: per ogni articolo e taglia del materiale, nella stagione scelta, rimaste dalla stagione prima, arrivate, a disposizione, distribuite e rimaste ora. Nella stagione in corso propone quanto ordinare per la successiva (distribuite + richieste aperte + scorta − rimaste − già in arrivo); i numeri si correggono a mano, <b>Salva come ordine</b> li aggiunge agli ordinati al fornitore e <b>Scarica in Excel</b> salva la tabella. La percentuale di scorta si imposta in Impostazioni (25% se non indicata). A fine stagione l'ordine si prepara <b>prima</b> di «Chiudi la stagione» in Impostazioni: la proposta si basa sulle consegne della stagione in corso, e con la stagione nuova i conti ripartono da zero (le rimaste diventano «rimaste dalla stagione prima»). Le stagioni passate restano consultabili dal menu in alto.</p>
     <p><b>Avviso di scorta bassa</b> — aggiungendo una richiesta o consegnando un articolo, il programma avvisa se in magazzino non ce n’è oppure se di quell’articolo, in quella taglia, ne restano da assegnare meno della soglia scelta in Impostazioni (5 se non indicata). Il conto toglie quanto è già prenotato per altre richieste e quanto risulta già da ordinare.</p>
-    <p><b>Impostazioni</b> — stagione in corso, soglia della scorta bassa, nome e stemma della società, fogli Excel (scaricare e caricare i dati, scaricare i movimenti), codici degli articoli, aspetto (chiaro, scuro o come il computer), aggiornamenti e copie di sicurezza. Le funzioni che lavorano con i file sono disponibili nel programma installato.</p>`)}
+    <p><b>Impostazioni</b> — stagione in corso e chiusura della stagione, soglia della scorta bassa, percentuale di scorta negli ordini, nome e stemma della società, fogli Excel (scaricare e caricare i dati, scaricare i movimenti), codici degli articoli, aspetto (chiaro, scuro o come il computer), aggiornamenti e copie di sicurezza. Le funzioni che lavorano con i file sono disponibili nel programma installato.</p>`)}
 
   ${sezione('La regola dei numeri',`
     <p>All'interno di una squadra <b>un numero di maglia non può ripetersi</b>. Tra squadre diverse lo stesso numero è invece ammesso.</p>
@@ -1753,7 +1966,7 @@ function vManuale(){
     <p>I rientri si registrano dalla scheda dell'atleta con <b>Restituita</b> (divise) o <b>Restituito</b> (materiale), oppure con il ritiro da tutta la squadra o con «consegnato» nel modulo per le divise da cambiare. <b>Segna da cambiare</b> indica una divisa come da sostituire. <b>Modifica</b>, sulla divisa nella scheda dell'atleta, ne corregge taglia, numero e lotto; se la divisa giusta è già in magazzino, le due si scambiano e quella segnata per errore torna in magazzino.</p>`)}
 
   ${sezione('Annullare un movimento',`
-    <p>In Movimenti, <b>Annulla</b> rimette il magazzino nella situazione precedente. Una consegna con il ritiro della maglia vecchia si annulla per intero, e la richiesta consegnata torna aperta; l'annullamento di un carico rimette tra gli ordinati i pezzi che aveva scalato.</p>
+    <p>In Movimenti, <b>Annulla</b> rimette il magazzino nella situazione precedente. Una consegna con il ritiro della maglia vecchia si annulla per intero, e la richiesta consegnata torna aperta; l'annullamento di un arrivo rimette tra gli ordinati i pezzi che aveva scalato.</p>
     <p>L'annullamento non è consentito se dopo quel movimento ne sono stati registrati altri sullo stesso capo o, per il materiale di un atleta, sullo stesso articolo; se la giacenza scenderebbe sotto zero; se la divisa tornerebbe a un atleta non più in archivio. In questi casi occorre annullare prima i movimenti successivi o correggere la giacenza.</p>`)}
 
   ${sezione('Atleti in due squadre',`
@@ -1951,6 +2164,8 @@ function vImpostazioni(){
   <div class="filters corti"><input type="text" id="stag" value="${esc(D.set.stagione)}" aria-label="Stagione"><button type="button" class="btn" data-act="saveStag">Correggi il nome</button></div>
   <h2>Avviso di scorta bassa</h2><p class="sub">Quando si aggiunge una richiesta o si consegna un articolo, il programma avvisa se in magazzino non ce n’è oppure se di quell’articolo, in quella taglia, ne restano da assegnare meno di questo numero. Con 0 avvisa solo quando non ce n’è più.</p>
   <div class="filters corti"><input type="number" id="soglia" min="0" max="999" inputmode="numeric" value="${esc(sogliaScorta(D))}" aria-label="Soglia di avviso"><button type="button" class="btn" data-act="saveSoglia">Salva soglia</button></div>
+  <h2>Scorta negli ordini</h2><p class="sub">In Magazzino → Storico e ordini, la proposta per la stagione successiva aggiunge una scorta pari a questa percentuale dei pezzi distribuiti (almeno un pezzo per le taglie usate). ${percScorta(D)>0?`Con il ${esc(percScorta(D))}% il magazzino non resta vuoto anche se la stagione successiva è fino al ${esc(percScorta(D))}% più intensa.`:'Con 0 la proposta non aggiunge scorta: si ordina solo quanto distribuito.'}</p>
+  <div class="filters corti"><input type="number" id="scortaOrd" min="0" max="300" inputmode="numeric" value="${esc(percScorta(D))}" aria-label="Percentuale di scorta"><button type="button" class="btn" data-act="saveScortaOrd">Salva percentuale</button></div>
   <h2>Società</h2><p class="sub">Il nome e lo stemma compaiono in alto, accanto a «Magazzino», e il nome anche nel titolo della finestra. Sono salvati nell’archivio: il programma non appartiene a una società in particolare.</p>
   <div class="filters corti"><input type="text" id="soc" value="${esc(D.set.societa||'')}" placeholder="Nome della società" aria-label="Nome della società"><button type="button" class="btn" data-act="saveSoc">Salva nome</button></div>
   <div class="row-actions" style="margin-top:8px"><button type="button" class="btn" data-act="scegliLogo">${D.set.logo?'Cambia stemma…':'Carica lo stemma…'}</button>${D.set.logo?`<button type="button" class="btn ghost" data-act="togliLogo">Togli lo stemma</button>`:''}</div>
@@ -2054,7 +2269,7 @@ function giacenzeNegative(){
   for(const [k,st] of Object.entries(D.stock)){
     const [art,tg]=k.split('|');
     if(D.conNumero(art))continue;
-    if(st.ora<0)out.push(`${esc(artLabel(art))} ${tg==='UNICA'?'':esc(tg)}: la giacenza è ${st.ora}. Verificare carichi e annullamenti nei movimenti.`);
+    if(st.ora<0)out.push(`${esc(artLabel(art))} ${tg==='UNICA'?'':esc(tg)}: la giacenza è ${st.ora}. Verificare arrivi e annullamenti nei movimenti.`);
   }
   return out;
 }
@@ -2115,8 +2330,10 @@ function restoScorta(D,art,tg,aid,modello,lottoDato){
   const tgL=tg==='UNICA'?'taglia unica':'taglia '+tg;
   if(D.conNumero(art)){
     const lotto=lottoDato||D.modelloPer({atletaId:aid,modello:modello||''});
+    const at=aid&&S.atlete[aid];const occ=at?(D.occ[at.squadra]||new Set()):null;
     const libere=Object.entries(S.divise).filter(([id,d])=>!d.dismessa&&!d.fuoriUso&&(d.modello||'STANDARD')===lotto
-      &&d.taglia===tg&&(!d.holder||d.daRestituire)&&!D.prenDivisa[id]).length;
+      &&d.taglia===tg&&(!d.holder||d.daRestituire)&&!D.prenDivisa[id]
+      &&(!at||(!occ.has(Number(d.numero))&&numeroDaDare(D,at.squadra,aid,d)))).length;
     const mancano=Object.entries(D.prop).filter(([rid,p])=>p.esito==='MANCA'&&S.richieste[rid]
       &&D.conNumero(S.richieste[rid].articolo)&&S.richieste[rid].taglia===tg&&D.modelloPer(S.richieste[rid])===lotto).length;
     return {n:libere-mancano,cosa:`${artLabel(art)} (${nomeLotto(lotto)}) ${tgL}`}}
@@ -2124,6 +2341,58 @@ function restoScorta(D,art,tg,aid,modello,lottoDato){
   const mancano=Object.entries(D.prop).filter(([rid,p])=>p.esito==='MANCA'&&S.richieste[rid]
     &&S.richieste[rid].articolo===art&&S.richieste[rid].taglia===tg).length;
   return {n:q.ora-(D.prenMat[k]||0)-mancano,ord:q.ordinati||0,cosa:`${artLabel(art)} ${tgL}`}}
+/* Storico e ordini (la responsabile del magazzino della societa', 05/10/2026: "avere a
+   memoria il quantitativo ordinato, quello che avevo in casa e le rimanenze a
+   fine anno, per ottimizzare gli ordini della prossima stagione"). Niente
+   previsioni: per ogni articolo e taglia del materiale, i conti della stagione
+   presi dai movimenti, che hanno gia' la loro stagione.
+     rimaste prima = pezzi di partenza + tutto quello successo nelle stagioni
+                     precedenti (nella prima stagione: i pezzi di partenza)
+     arrivate      = arrivi registrati nella stagione (anche gli ordini a meta' stagione)
+     distribuite   = consegne meno rientri, ad atleti, staff ed esterni
+     correzioni    = inventari e dismessi
+     rimaste ora   = rimaste prima + arrivate + correzioni - distribuite
+   Le divise non ci sono: sono capi numerati, si contano uno per uno.
+   I «gia' in possesso» del foglio non contano: non sono usciti dal magazzino. */
+function stagioniNote(D){
+  const v=new Set([D.set.stagione||'']);
+  for(const m of Object.values(S.movimenti))if(m.stagione)v.add(m.stagione);
+  return [...v].filter(Boolean).sort()}
+function storicoStagione(D,stag){
+  const tutte=stagioniNote(D);const prima=tutte[0]||stag;
+  const righe={};
+  const r=(a,t)=>{const k=D.key(a,t);return righe[k]||(righe[k]={art:a,tg:t,prima:0,arrivate:0,corr:0,distr:0})};
+  for(const m of Object.values(S.materiale)){if(D.conNumero(m.articolo))continue;r(m.articolo,m.taglia).prima+=Number(m.iniziale)||0}
+  for(const mv of Object.values(S.movimenti)){
+    if(mv.divisaId||D.conNumero(mv.articolo)||!mv.articolo||!mv.taglia)continue;
+    const ms=mv.stagione||prima;if(ms>stag)continue;
+    const q=Number(mv.qta)||0;const x=r(mv.articolo,mv.taglia);
+    if(ms<stag){
+      if(mv.tipo==='CARICO'||mv.tipo==='RETTIFICA'||mv.tipo==='RIENTRO')x.prima+=q;
+      else if(mv.tipo==='CONSEGNA'||mv.tipo==='SCARTO')x.prima-=q}
+    else if(mv.tipo==='CARICO')x.arrivate+=q;
+    else if(mv.tipo==='RETTIFICA')x.corr+=q;
+    else if(mv.tipo==='SCARTO')x.corr-=q;
+    else if(mv.tipo==='CONSEGNA')x.distr+=q;
+    else if(mv.tipo==='RIENTRO')x.distr-=q}
+  // nella stagione in corso servono anche gli articoli chiesti e mai entrati in
+  // magazzino: se no restavano fuori dalla proposta d'ordine
+  if(stag===(D.set.stagione||''))for(const q of Object.values(S.richieste))if(q.articolo&&q.taglia&&!D.conNumero(q.articolo))r(q.articolo,q.taglia);
+  for(const x of Object.values(righe)){x.disp=x.prima+x.arrivate;x.ora=x.disp+x.corr-x.distr}
+  return righe}
+/* La proposta d'ordine, solo per la stagione in corso. La scorta e' una
+   percentuale del distribuito (Andrea, 05/10/2026: "non vorrei che il
+   magazzino andasse a zero"): con il 25% il magazzino regge una stagione fino
+   al 25% piu' intensa di questa. Almeno un pezzo per le taglie usate, nessuno
+   per quelle che nessuno ha preso. */
+const SCORTA_ORDINI_BASE=25;
+const percScorta=D=>{const v=Number(D.set.scortaOrdini);return D.set.scortaOrdini!=null&&D.set.scortaOrdini!==''&&Number.isFinite(v)&&v>=0?v:SCORTA_ORDINI_BASE};
+function propostaOrdine(D,x){
+  const aperte=Object.entries(S.richieste).filter(([rid,q])=>q.articolo===x.art&&q.taglia===x.tg&&(D.prop[rid]||{}).esito!=='ESCLUSA').length;
+  const inArrivo=(D.stock[D.key(x.art,x.tg)]||{}).ordinati||0;
+  const usate=Math.max(0,x.distr);
+  const scorta=usate>0?Math.max(1,Math.ceil(usate*percScorta(D)/100)):0;
+  return {aperte,inArrivo,scorta,da:Math.max(0,usate+aperte+scorta-x.ora-inArrivo)}}
 /* Al caricamento del foglio niente finestre una per articolo (Andrea, 03/10:
    "quando carichiamo come potremmo fare?"): il giro di prova tiene il conto di
    quanto ogni articolo e taglia cambia (una richiesta nuova o una consegna senza
@@ -2188,7 +2457,8 @@ async function w(fn){
 }
 const today=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 let _seq=0,_gruppo=null;
-function mov(o){return S.db.collection('movimenti').add(Object.assign({ts:Date.now()+(_seq++%1000)/1000,data:today(),stagione:(S.settings&&S.settings.stagione)||'',qta:1,atletaId:null,divisaId:null,numero:null,note:''},_gruppo?{gruppo:_gruppo}:{},o))}
+let _ultimoTs=0;
+function mov(o){_ultimoTs=Math.max(Date.now(),_ultimoTs+0.001);return S.db.collection('movimenti').add(Object.assign({ts:_ultimoTs,data:today(),stagione:(S.settings&&S.settings.stagione)||'',qta:1,atletaId:null,divisaId:null,numero:null,note:''},_gruppo?{gruppo:_gruppo}:{},o))}
 /* I movimenti scritti dentro fn fanno parte di una sola operazione (una
    consegna con il ritiro della maglia vecchia): si annullano insieme. */
 async function insieme(fn){
@@ -2273,6 +2543,12 @@ async function annullaMovimento(id){
     if(x.divisaId){
       if(dopo.some(y=>y.divisaId===x.divisaId)){toast('Annullare prima i movimenti più recenti di questa divisa.');return}
       if(x.prevHolder&&!S.atlete[x.prevHolder]){toast('La divisa tornerebbe a un atleta che non è più in archivio: annullamento non possibile.');return}
+      if(x.prevHolder&&!x.prevDR&&S.divise[x.divisaId]){
+        const dv=S.divise[x.divisaId];const sq=S.atlete[x.prevHolder].squadra;
+        const toccate=new Set(gruppo.map(g=>g[1].divisaId).filter(Boolean));
+        const altra=Object.entries(S.divise).find(([yid,y])=>!toccate.has(yid)&&!y.dismessa&&y.holder&&y.holder!==x.prevHolder&&!y.daRestituire
+          &&S.atlete[y.holder]&&stessaSerie(D,S.atlete[y.holder].squadra,sq)&&Number(y.numero)===Number(dv.numero));
+        if(altra){toast(`Il numero ${dv.numero} nel frattempo è stato assegnato a ${fullName(S.atlete[altra[1].holder])}: annullamento non possibile.`);return}}
       continue}
     // Materiale di un atleta: prima i movimenti piu' recenti dello stesso
     // articolo per lo stesso atleta, se no la giacenza cresce di un pezzo che
@@ -2332,7 +2608,7 @@ function dlgRichiesta(aid,rid,pre){
   const tgPre=vecchia?vecchia.taglia:pre&&pre.taglia;const modPre=vecchia?(vecchia.modello||''):pre?(pre.modello||''):null;
   openDlg(`<h2>${vecchia?'Modifica richiesta':'Nuova richiesta'}</h2><p class="sub">${esc(fullName(a))} · ${esc(teamLabel(a.squadra))}</p>${pre&&pre.spiega?`<div class="notice">${esc(pre.spiega)}</div>`:''}
   <div class="field"><label for="rArt">Articolo</label><select id="rArt" name="articolo">${arts.map(x=>`<option value="${esc(x.nome)}"${x.nome===first?' selected':''}>${esc(artLabel(x.nome))}</option>`).join('')}</select></div>
-  <div class="two"><div class="field"><label for="rTg">Taglia</label><select id="rTg" name="taglia">${sizesFor(first).map(t=>`<option${tgPre===t?' selected':''}>${esc(t)}</option>`).join('')}</select></div>
+  <div class="two"><div class="field"><label for="rTg">Taglia</label><select id="rTg" name="taglia">${sizesFor(first).map(t=>`<option value="${esc(t)}"${tgPre===t?' selected':''}>${t==='UNICA'?'taglia unica':esc(t)}</option>`).join('')}</select></div>
   <div class="field" id="fMod"><label for="rMod">Tipo di divisa</label><select id="rMod" name="modello">${modelliSceglibili(aid).map(m=>`<option value="${esc(m.v)}"${modPre!==null&&modPre===m.v?' selected':''}>${esc(m.t)}</option>`).join('')}</select></div></div>
   <div class="field" id="fNum"><label for="rNum">Numero desiderato (facoltativo)</label><input type="number" id="rNum" name="numero" min="0" max="99" inputmode="numeric" value="${vecchia&&vecchia.numeroDesiderato!=null?esc(vecchia.numeroDesiderato):''}"></div>
   <div class="field"><label for="rNote">Nota</label><input type="text" id="rNote" name="note" maxlength="200" value="${esc((vecchia&&vecchia.note)||'')}"></div>
@@ -2351,7 +2627,7 @@ function dlgRichiesta(aid,rid,pre){
     if(ok){toast('Richiesta aggiunta');if(btn==='again'){form.querySelector('#rNum').value='';form.querySelector('#rNote').value='';return false}}
     return ok});
   const upd=()=>{const n=$('#rArt').value;const tenuta=$('#rTg').value;
-    $('#rTg').innerHTML=sizesFor(n).map(t=>`<option${t===tenuta?' selected':''}>${esc(t)}</option>`).join('');const isN=D.conNumero(n);$('#fMod').style.display=isN?'':'none';$('#fNum').style.display=isN?'':'none'};
+    $('#rTg').innerHTML=sizesFor(n).map(t=>`<option value="${esc(t)}"${t===tenuta?' selected':''}>${t==='UNICA'?'taglia unica':esc(t)}</option>`).join('');const isN=D.conNumero(n);$('#fMod').style.display=isN?'':'none';$('#fNum').style.display=isN?'':'none'};
   $('#rArt').addEventListener('change',upd);upd();
 }
 /* Consegna senza passare da una richiesta. In palestra, con l'atleta davanti,
@@ -2400,7 +2676,7 @@ function dlgMovimento(nomeFuori){
     const st=(D.stock[D.key(fd.articolo,tg)]||{ora:0}).ora;
     if(fd.tipo==='CONSEGNA'&&st<qta&&!await chiedi(`In magazzino ne risultano ${st}. Registrare comunque l’uscita di ${qta}?`))return false;
     const ok=await w(()=>mov({tipo:fd.tipo,articolo:fd.articolo,taglia:tg,qta,atletaId:null,a:chi,note:fd.note||''}));
-    if(ok)toast(fd.tipo==='CONSEGNA'?`${qta} ${qta===1?'pezzo consegnato':'pezzi consegnati'} a ${chi}`:`${qta} ${qta===1?'pezzo rientrato':'pezzi rientrati'} da ${chi}`);
+    if(ok)toast(fd.tipo==='CONSEGNA'?`${qta} ${qta===1?'pezzo consegnato':'pezzi consegnati'} — destinatario: ${chi}`:`${qta} ${qta===1?'pezzo rientrato':'pezzi rientrati'} — restituiti da: ${chi}`);
     if(ok&&fd.tipo==='CONSEGNA')controllaScorta({art:fd.articolo,tg});
     return ok});
 
@@ -2482,10 +2758,13 @@ function dlgDiretta(aid){
     const altra=collegati(aid).find(x=>Object.entries(D.dotazione[x]||{}).some(([k,v])=>v>0&&k.split('|')[0]===art));
     if(altra&&!await chiedi(`${fullName(a)} ha già ricevuto questo articolo con la scheda di ${teamLabel(S.atlete[altra].squadra)}. Registrare comunque la consegna?`))return false;
     if(st<qta&&!await chiedi(`In magazzino ne risultano ${st}. Registrare comunque la consegna di ${qta}?`))return false;
+    // N pezzi chiudono fino a N richieste aperte della stessa cosa: prima ne
+    // chiudeva una sola e il programma ne proponeva altri.
+    const coperte=richiesteCoperte(aid,art,tg,qta);
     const ok=await w(()=>insieme(async()=>{
-      await mov({tipo:'CONSEGNA',atletaId:aid,articolo:art,taglia:tg,qta,...(foto?{richiesta:foto}:{})});
-      if(rid)await S.db.doc('richieste/'+rid).delete()}));
-    if(ok){toast(`${qta} ${qta===1?'pezzo consegnato':'pezzi consegnati'}${rid?', richiesta chiusa':''}`);controllaScorta({art,tg,aid})}
+      await mov({tipo:'CONSEGNA',atletaId:aid,articolo:art,taglia:tg,qta,...(coperte.length?{richieste:coperte.map(fotoRichiesta)}:{})});
+      for(const r2 of coperte)await S.db.doc('richieste/'+r2).delete()}));
+    if(ok){toast(`${qta} ${qta===1?'pezzo consegnato':'pezzi consegnati'}${coperte.length?`, ${coperte.length===1?'richiesta chiusa':coperte.length+' richieste chiuse'}`:''}`);controllaScorta({art,tg,aid})}
     return ok});
 
   // Divisa o materiale cambiano mezza finestra: si mostra solo quello che serve.
@@ -2756,7 +3035,7 @@ function dlgDivisa(id){
         // detto 8 M, poi scopro che era una S»): se quella divisa esiste gia' ed
         // e' in magazzino, non se ne crea un doppione: si scambiano. L'atleta
         // prende quella giusta, quella segnata per errore torna in magazzino.
-        const libera=d.holder&&dups.find(([,y])=>!y.holder);
+        const libera=d.holder&&dups.find(([,y])=>!y.holder&&!y.fuoriUso);
         if(libera){
           const [lid,ld]=libera;const chi=S.atlete[d.holder];
           // Puo' anche darsi che le maglie uguali siano davvero due (Andrea):
@@ -2764,7 +3043,7 @@ function dlgDivisa(id){
           if(await chiedi(`In magazzino c’è già una divisa ${tg} n.${num} di questo lotto. Se è quella che ha ${fullName(chi)}, si scambiano: la prende lei e la ${d.taglia} n.${d.numero} torna in magazzino. Se invece le ${tg} n.${num} sono davvero due, premere Annulla.`,{si:'Scambia'})){
           const nota=`Correzione: aveva la ${tg} n.${num}, non la ${d.taglia} n.${d.numero}`;
           const ok=await w(()=>insieme(async()=>{
-            await S.db.doc('divise/'+id).update({holder:null,daRestituire:false,tagliaChiesta:null,note:fd.note||''});
+            await S.db.doc('divise/'+id).update({holder:null,daRestituire:false,tagliaChiesta:null});
             await mov({tipo:'RIENTRO',atletaId:d.holder,articolo:artDivisa(),taglia:d.taglia,divisaId:id,numero:d.numero,prevHolder:d.holder,prevDR:!!d.daRestituire,prevTC:d.tagliaChiesta||null,note:nota});
             await S.db.doc('divise/'+lid).update({holder:d.holder,daRestituire:!!d.daRestituire});
             await mov({tipo:'CONSEGNA',atletaId:d.holder,articolo:artDivisa(),taglia:tg,divisaId:lid,numero:num,prevHolder:null,prevDR:!!ld.daRestituire,note:nota})}));
@@ -2804,7 +3083,7 @@ function dlgMat(art,tg){
   <div class="field" id="fQ"><label for="mQ" id="lQ">Quanti pezzi</label><input type="number" id="mQ" name="qta" min="0" step="1" required inputmode="numeric"></div>
   ${art?`<div class="field" id="fOrd"><label for="mOrd">Ordinati al fornitore, in arrivo</label><input type="number" id="mOrd" name="ordinati" min="0" step="1" inputmode="numeric" value="${ordOra||''}" placeholder="0"></div>`:''}
   <div class="field"><label for="mNote">Nota</label><input type="text" id="mNote" name="note" maxlength="200"></div>
-  ${actions(art?'Registra arrivo':'Registra carico')}`,async(fd,btn)=>{
+  ${actions('Registra arrivo')}`,async(fd,btn)=>{
     // Una finestra, quattro azioni: si sceglie in cima cosa si registra e c'e'
     // un pulsante solo (Andrea, 26/09/2026: cinque pulsanti per quattro azioni,
     // con caselle diverse, non si capiva quale premere).
@@ -2858,7 +3137,7 @@ function dlgMat(art,tg){
       if(btn==='rett'){const delta=q-now;if(delta!==0)await mov({tipo:'RETTIFICA',articolo:fd.articolo,taglia:fd.taglia,qta:delta,note:fd.note||'Inventario'})}
       else await mov({tipo:'CARICO',articolo:fd.articolo,taglia:fd.taglia,qta:q,note:fd.note||'',...(scalati>0?{ordScalati:scalati}:{})})});
     if(ok)toast(btn==='rett'?`Giacenza corretta: adesso ne risultano ${q}`
-      :`Carico registrato${ordDopo!==ordPrima&&ordScritto==null?`, ne restano ${ordDopo} in arrivo`:''}`);return ok});
+      :`Arrivo registrato${scalati>0?(ordDopo>0?`, ne ${ordDopo===1?'resta':'restano'} ${ordDopo} in arrivo`:', nessun pezzo più in arrivo'):''}`);return ok});
   if(!art){const u=()=>{$('#mTg').innerHTML=sizesFor($('#mArt').value).map(t=>`<option>${esc(t)}</option>`).join('')};$('#mArt').addEventListener('change',u);u()}
   else{
     const AZ={arrivo:['Pezzi arrivati','Registra arrivo','primary',`I pezzi arrivati si aggiungono ${cur?`${cur===1?'a quello presente':`ai ${cur} presenti`}`:'al magazzino, oggi vuoto,'} e si tolgono da quelli in arrivo.`],
@@ -3034,6 +3313,10 @@ document.addEventListener('click',async e=>{
     case'atlTab':S.ui.atlTab=el.dataset.v;render();return;
     case'apriSq':{const n=el.dataset.n;S.ui.aperte[n]=!S.ui.aperte[n];render();return}
     case'magTab':S.ui.magTab=el.dataset.v;return render();
+    case'salvaOrdine':return salvaOrdine();
+    case'scaricaRiconto':return scaricaRiconto();
+    case'caricaRiconto':return caricaRiconto();
+    case'scaricaStorico':return scaricaStorico();
     case'assTab':S.ui.assTab=el.dataset.v;return render();
     case'toggleOld':S.ui.showOld=el.checked;return render();
     case'toggleInUse':S.ui.showInUse=el.checked;return render();
@@ -3043,7 +3326,15 @@ document.addEventListener('click',async e=>{
     case'matRow':return dlgMat(el.dataset.art,el.dataset.tg);
     case'mvAll':S.ui.mvAll=true;return render();
     case'annulla':return annullaMovimento(id);
-    case'saveSoglia':{const v=Math.max(0,Math.round(Number($('#soglia').value)));
+    case'saveScortaOrd':{const t=$('#scortaOrd').value.trim();
+      // vuota = si torna al valore predefinito (prima diventava 0 senza dirlo)
+      if(t===''){if(await w(()=>S.db.doc('settings/main').update({scortaOrdini:null})))toast(`Scorta negli ordini: ${SCORTA_ORDINI_BASE}% (valore predefinito)`);return}
+      const v=Math.max(0,Math.round(Number(t)));
+      if(!Number.isFinite(v)){toast('Indicare un numero');return}
+      if(await w(()=>S.db.doc('settings/main').update({scortaOrdini:v})))toast(`Scorta negli ordini: ${v}% dei pezzi distribuiti`);return}
+    case'saveSoglia':{const t=$('#soglia').value.trim();
+      if(t===''){if(await w(()=>S.db.doc('settings/main').update({sogliaScorta:null})))toast(`Avviso sotto i ${SOGLIA_BASE} pezzi (valore predefinito)`);return}
+      const v=Math.max(0,Math.round(Number(t)));
       if(!Number.isFinite(v)){toast('Indicare un numero');return}
       if(await w(()=>S.db.doc('settings/main').update({sogliaScorta:v})))toast(v?`Avviso sotto i ${v} pezzi`:'Avviso solo quando non ce n’è più');return}
     case'saveSoc':{const v=$('#soc').value.trim();
@@ -3059,7 +3350,11 @@ document.addEventListener('click',async e=>{
       // Correggere il nome non e' cambiare stagione: gli articoli di quest'anno
       // restano tali. Prima sparivano dal modulo senza avvisare.
       const articoli=(D.set.articoli||[]).map(a=>a.stagione&&a.stagione===vecchia?{...a,stagione:v}:a);
-      if(await w(()=>S.db.doc('settings/main').update({stagione:v,articoli})))toast('Nome della stagione corretto');return}
+      // Anche i movimenti: lo storico li divide per nome della stagione, e con
+      // il nome vecchio finivano in una stagione a parte (trovato in revisione).
+      const mvs=Object.entries(S.movimenti).filter(([,m])=>m.stagione===vecchia);
+      if(await w(async()=>{await S.db.doc('settings/main').update({stagione:v,articoli});
+        for(const [id] of mvs)await S.db.doc('movimenti/'+id).update({stagione:v})}))toast('Nome della stagione corretto');return}
     case'chiudiStagione':return dlgChiudiStagione();
     case'includi':{const sq=D.set.squadre.map((s,i)=>i===Number(el.dataset.i)?{...s,includi:el.checked}:{...s});
       if(await w(()=>S.db.doc('settings/main').update({squadre:sq})))toast(el.checked?'Squadra inclusa':'Squadra esclusa');return}
@@ -4159,6 +4454,7 @@ async function segnaPossesso(D,d,aid,art,taglia,conNum,prova,esito,aperte,presiQ
   if(qui)qui.add(num);
   if(libera){
     presiQui.divise.add(libera[0]);
+    contaScorta(esito,art.nome,taglia,libera[1].modello||'STANDARD',-1);
     if(!prova)await insieme(async()=>{
       await S.db.doc('divise/'+libera[0]).update({holder:aid,daRestituire:false});
       await mov({tipo:'POSSESSO',atletaId:aid,articolo:art.nome,taglia,divisaId:libera[0],numero:num,prevHolder:null,prevDR:!!libera[1].daRestituire,note:nota})});
@@ -4300,7 +4596,9 @@ async function eseguiModulo(D,daFare,prova){
       }
       const at=S.atlete[aid];
       // il lotto delle divise di questa riga (un'atleta nuova non e' ancora in S)
-      const lottoRiga=at?D.modelloPer({atletaId:aid,modello:''}):(D.lotto[d.squadra]||'STANDARD');
+      // la squadra della riga, non quella di adesso: nel giro di prova il cambio
+      // di squadra non e' ancora scritto (trovato in revisione)
+      const lottoRiga=D.lotto[d.squadra]||'STANDARD';
       const lot=a=>D.conNumero(a)?lottoRiga:'';
       // Nel programma il nome ha l'apostrofo al posto dell'accento («Provato'»):
       // si corregge, e lo si dice.
@@ -4453,7 +4751,7 @@ async function scaricaMovimenti(){
     if(!dove)return;
     await window.__APP.scriviExcel(dove,'Movimenti',
       ['Data','Tipo','Atleta o destinatario','Squadra','Codice','Articolo','Taglia','Numero','Quantità','Stagione','Nota'],righe,
-      guidaPerExcel(['MOVIMENTI — il registro di consegne, rientri, carichi e rettifiche, dal più vecchio.',
+      guidaPerExcel(['MOVIMENTI — il registro di consegne, rientri, arrivi e rettifiche, dal più vecchio.',
        '',`${righe.length} movimenti al ${fmtDate(today())}. Il foglio è solo da consultare: non si ricarica.`]));
     toast('Foglio salvato');
   }catch(e){toast('Scrittura del file non riuscita: '+e)}
@@ -4492,6 +4790,7 @@ function dlgChiudiStagione(){
   const artQuesta=(D.set.articoli||[]).filter(a=>a.stagione&&a.stagione===ora).length;
   openDlg(`<h2>Chiudi la stagione ${esc(ora)}</h2>
   <p class="sub">Prima di scrivere viene salvata una copia dei dati; la chiusura si può annullare dalla finestra che segue. Le consegne restano nel registro, con la loro stagione.</p>
+  <div class="notice">Prima di chiudere conviene preparare l’ordine per la stagione nuova in <b>Magazzino → Storico e ordini</b>: la proposta si basa sulle consegne della stagione in corso, e dopo la chiusura riparte da zero.</div>
   <div class="field"><label for="csNuova">Stagione nuova</label><input type="text" id="csNuova" name="nuova" required value="${esc(stagioneDopo(ora))}" placeholder="per esempio 2027/28"></div>
   ${artQuesta?`<label class="check"><input type="checkbox" name="articoli" checked> Gli ${artQuesta} articoli della stagione ${esc(ora)} restano in distribuzione anche nella nuova</label>`:''}
   <div class="field" style="margin-top:10px"><label>Le ${aperte} richieste aperte</label>
