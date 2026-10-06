@@ -2505,6 +2505,23 @@ function avvisoFisso(testo){
     d.addEventListener('close',chiuso);d.showModal();si.focus()});
 }
 window.chiedi=chiedi;
+/* Gli stili scritti dentro gli elementi (style="...") nel programma installato
+   non valgono: Tauri aggiunge alla regola di sicurezza della pagina le impronte
+   dei suoi stili, e da li' il browser ignora 'unsafe-inline' per gli attributi.
+   Nella versione di prova da browser invece valgono, e per questo non si vedeva:
+   i grafici della 0.3.23 sono usciti senza colori ne' altezze (Andrea, 06/10/2026).
+   Rimedio unico per tutta la pagina: ogni elemento che compare con un attributo
+   style lo riceve di nuovo attraverso il CSSOM (el.style), che la regola consente. */
+function applicaStiliScritti(radice){
+  const fai=el=>{const t=el.getAttribute('style');if(t&&el.style.cssText!==t)el.style.cssText=t};
+  if(radice.nodeType!==1)return;
+  if(radice.hasAttribute('style'))fai(radice);
+  radice.querySelectorAll('[style]').forEach(fai)}
+new MutationObserver(lista=>{for(const m of lista){
+  if(m.type==='attributes'){if(m.attributeName==='style')continue;}
+  for(const n of m.addedNodes)applicaStiliScritti(n)}})
+  .observe(document.documentElement,{childList:true,subtree:true});
+applicaStiliScritti(document.body);
 /* ============ scritture ============ */
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3200)}
 async function w(fn){
