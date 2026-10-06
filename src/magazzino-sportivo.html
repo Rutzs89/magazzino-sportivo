@@ -13,6 +13,7 @@
   --bg:#EEF0F2; --surface:#FFFFFF; --ink:#1C2430; --muted:#5E6875; --line:#D6DAE0;
   --yellow:#F2C230; --yellow-ink:#8A6A00; --yellow-soft:#FFF4CC;
   --ok:#2E7D4F; --ok-soft:#E3F2E8; --bad:#B4430C; --bad-soft:#FBE7DC; --blue:#2F5DA8; --blue-soft:#E3EAF7;
+  --g-ok:#2E7D4F; --g-blu:#2F5DA8; --g-bad:#B4430C; --g-amb:#A87A00; --g-txt:#FFFFFF;
   --radius:10px;
   --f-body:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
   --f-cond:'Barlow Condensed','Arial Narrow','Roboto Condensed',system-ui,sans-serif;
@@ -27,6 +28,7 @@
     --bg:#151A21; --surface:#1E252F; --ink:#E8ECF1; --muted:#9AA4B1; --line:#303946;
     --yellow-ink:#F2C230; --yellow-soft:#3A3117;
     --ok:#6CC08F; --ok-soft:#1D3327; --bad:#F08A5D; --bad-soft:#3A2419; --blue:#8DB0EB; --blue-soft:#1E2B42;
+    --g-ok:#3E9E68; --g-blu:#5B8DE0; --g-bad:#CC6436; --g-amb:#B08918; --g-txt:#10151B;
     color-scheme:dark;
   }
 @media (prefers-color-scheme:dark){
@@ -34,6 +36,7 @@
     --bg:#151A21; --surface:#1E252F; --ink:#E8ECF1; --muted:#9AA4B1; --line:#303946;
     --yellow-ink:#F2C230; --yellow-soft:#3A3117;
     --ok:#6CC08F; --ok-soft:#1D3327; --bad:#F08A5D; --bad-soft:#3A2419; --blue:#8DB0EB; --blue-soft:#1E2B42;
+    --g-ok:#3E9E68; --g-blu:#5B8DE0; --g-bad:#CC6436; --g-amb:#B08918; --g-txt:#10151B;
     color-scheme:dark;
   }
 }
@@ -41,6 +44,7 @@
   --bg:#151A21; --surface:#1E252F; --ink:#E8ECF1; --muted:#9AA4B1; --line:#303946;
   --yellow-ink:#F2C230; --yellow-soft:#3A3117;
   --ok:#6CC08F; --ok-soft:#1D3327; --bad:#F08A5D; --bad-soft:#3A2419; --blue:#8DB0EB; --blue-soft:#1E2B42;
+    --g-ok:#3E9E68; --g-blu:#5B8DE0; --g-bad:#CC6436; --g-amb:#B08918; --g-txt:#10151B;
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -264,6 +268,26 @@ body.inCasa #view{display:flex;flex-direction:column;justify-content:center;min-
 /* [hidden] vale anche sugli elementi con un display scritto: nella finestra del
    materiale le caselle da nascondere restavano visibili (trovato nel giro di prova) */
 .field[hidden],.two[hidden]{display:none}
+/* Grafici (06/10/2026): fatti con semplici riquadri, niente librerie. Segmenti
+   separati da 2 px, estremita' arrotondate, numeri in inchiostro e non nel colore. */
+.grLeg{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin:4px 0 8px}
+.grLeg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.grAvanz{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px}
+.grAvanz h2{margin:0 0 2px;font-size:18px}
+.grRiga{display:grid;grid-template-columns:minmax(70px,9em) 1fr 4.5em;gap:10px;align-items:center;padding:3px 0}
+.grRiga .nome{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grRiga .perc{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+.grBarra{display:flex;gap:2px;height:18px}
+.grBarra span{display:block;height:100%;min-width:3px;overflow:hidden;color:var(--g-txt);font-size:11px;font-weight:600;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+.grBarra span:first-child{border-radius:4px 0 0 4px}.grBarra span:last-child{border-radius:0 4px 4px 0}
+.grBarra span:only-child{border-radius:4px}
+.grTaglie{display:flex;align-items:flex-end;gap:10px;padding:6px 4px 2px;margin:0 0 6px;overflow-x:auto}
+.grTaglie .col{display:flex;flex-direction:column;align-items:center;min-width:30px;flex:0 0 auto}
+.grTaglie .pila{display:flex;flex-direction:column-reverse;gap:2px;width:24px}
+.grTaglie .pila span{display:block;width:100%}
+.grTaglie .pila span:last-child{border-radius:4px 4px 0 0}
+.grTaglie .tot{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:2px}
+.grTaglie .tg{font-size:12px;color:var(--ink);margin-top:3px;font-weight:600}
 .storico .propOrig{display:block;color:var(--muted);font-size:11px}
 /* Tabelle del Materiale fra 800 e 1000 px: colonne piu' strette invece dello
    scorrimento laterale (936 px contro 739 disponibili, trovato nel giro di prova) */
@@ -274,6 +298,8 @@ body.inCasa #view{display:flex;flex-direction:column;justify-content:center;min-
   /* righe con pulsanti a destra: i pulsanti vanno sotto, il testo resta leggibile */
   .item{flex-wrap:wrap}.item .main{flex:1 1 150px}.item .right{flex:1 1 100%;justify-content:flex-start}
   /* barra in basso: sette voci, carattere stretto perche' le parole non si tocchino */
+  /* grafico dell avanzamento: nome piu stretto, la barra resta leggibile */
+  .grRiga{grid-template-columns:minmax(56px,6em) 1fr 3em;gap:8px}
   .tabs a{font-family:var(--f-cond);font-size:11px;letter-spacing:-.1px;min-width:0;padding:4px 0}
 }
 .storico input.ordIn{width:4.2em;text-align:right;padding:4px 6px}
@@ -1413,7 +1439,8 @@ function dlgArticolo(i){
 function testaSquadre(){
   const rie=S.ui.atlTab==='riepilogo';
   const spiega=rie
-    ?legenda(`<p>La dotazione attuale di ogni atleta, per squadra: quanto consegnato al netto dei rientri. Ogni colonna corrisponde a un articolo; le divise sono indicate con numero e taglia.</p>
+    ?legenda(`<p>In cima, <b>Avanzamento della distribuzione</b>: per ogni squadra una barra con i pezzi già consegnati in questa stagione, le richieste pronte da consegnare e quelle da ordinare; a destra la percentuale già consegnata. Passando con il mouse su un tratto si legge il numero.</p>
+      <p>Sotto, la dotazione attuale di ogni atleta, per squadra: quanto consegnato al netto dei rientri. Ogni colonna corrisponde a un articolo; le divise sono indicate con numero e taglia.</p>
       <p>Le righe evidenziate in rosso indicano atleti con lo stesso numero di un compagno di squadra.</p>`,
       [[`<span class="numTag">8<small>M</small></span>`,'in uso'],
        [`<span class="numTag da">8<small>M</small></span>`,'da cambiare'],
@@ -1471,6 +1498,25 @@ function conNumeroDoppio(D){
   return fuori;
 }
 
+/* Avanzamento della distribuzione, una barra per squadra: pezzi gia' consegnati
+   in questa stagione, richieste pronte, richieste da ordinare (Andrea, 06/10/2026).
+   Le escluse non contano: non sono lavoro da fare. */
+function graficoAvanzamento(D){
+  const stag=D.set.stagione||'';
+  const per={};const r=sq=>per[sq]||(per[sq]={cons:0,ok:0,manca:0});
+  for(const m of Object.values(S.movimenti)){if(m.tipo!=='CONSEGNA'||!m.atletaId||(m.stagione||'')!==stag)continue;
+    const a=S.atlete[m.atletaId];if(a)r(a.squadra).cons+=Number(m.qta)||1}
+  for(const [rid,p] of Object.entries(D.prop)){const q=S.richieste[rid];const a=q&&S.atlete[q.atletaId];if(!a)continue;
+    if(p.esito==='OK')r(a.squadra).ok++;else if(p.esito==='MANCA')r(a.squadra).manca++}
+  const sq=D.perServire.filter(x=>(!S.ui.team||x.nome===S.ui.team)&&per[x.nome]&&(per[x.nome].cons+per[x.nome].ok+per[x.nome].manca));
+  if(!sq.length)return '';
+  const seg=(n,tot,col,t)=>n?`<span style="flex:${n} 1 0;background:${col}" title="${t}">${n/tot>=0.12?n:''}</span>`:'';
+  return `<section class="grAvanz" aria-label="Avanzamento della distribuzione"><h2>Avanzamento della distribuzione</h2>
+    <div class="grLeg"><span><i style="background:var(--g-ok)"></i>consegnati</span><span><i style="background:var(--g-blu)"></i>pronti da consegnare</span><span><i style="background:var(--g-bad)"></i>da ordinare</span></div>
+    ${sq.map(x=>{const c=per[x.nome];const tot=c.cons+c.ok+c.manca;const pc=Math.round(c.cons/tot*100);
+      return `<div class="grRiga"><span class="nome">${esc(teamLabel(x.nome))}</span>
+        <div class="grBarra" role="img" aria-label="${esc(teamLabel(x.nome))}: ${c.cons} consegnati, ${c.ok} pronti, ${c.manca} da ordinare">${seg(c.cons,tot,'var(--g-ok)',`${c.cons} consegnati`)}${seg(c.ok,tot,'var(--g-blu)',`${c.ok} pronti da consegnare`)}${seg(c.manca,tot,'var(--g-bad)',`${c.manca} da ordinare`)}</div>
+        <span class="perc" title="${c.cons} consegnati su ${tot}">${pc}%</span></div>`}).join('')}</section>`}
 function vRiepilogo(){
   const D=derive();
   const q=norm(S.ui.q);
@@ -1481,7 +1527,7 @@ function vRiepilogo(){
     &&(!q||norm(fullName(a)).includes(q))
     &&(nQ===null||(D.perAtleta[id]||[]).some(x=>Number(S.divise[x].numero)===nQ));
 
-  let html=testaSquadre();
+  let html=testaSquadre()+graficoAvanzamento(D);
 
   // Quali articoli compaiono davvero: inutile una colonna per chi non ha consegnato niente.
   const colonne=new Set();
@@ -1547,6 +1593,17 @@ function vRiepilogo(){
    posto. Erano due schermate, ma sono lo stesso oggetto: una diceva le taglie,
    l'altra quante ne restavano, e per cambiare una taglia bisognava cambiare
    schermata. */
+/* La «curva delle taglie» di un articolo: per ogni taglia una colonna con le
+   distribuite (sotto) e le rimaste ora (sopra). Si vede dove si consuma di piu'
+   e dove avanza merce: serve a fare l'ordine (Andrea, 06/10/2026). */
+function graficoTaglie(ts){
+  const v=ts.map(x=>({tg:x.tg,d:Math.max(0,x.distr),r:Math.max(0,x.ora)}));
+  const max=Math.max(1,...v.map(x=>x.d+x.r));
+  if(!v.some(x=>x.d+x.r))return '';
+  const h=n=>n?Math.max(2,Math.round(n/max*88)):0;
+  return `<div class="grTaglie" role="img" aria-label="Distribuite e rimaste per taglia">${v.map(x=>`<div class="col" title="${esc(x.tg==='UNICA'?'taglia unica':x.tg)}: distribuite ${x.d}, rimaste ora ${x.r}">
+    <span class="tot">${x.d+x.r||''}</span><div class="pila">${x.d?`<span style="height:${h(x.d)}px;background:var(--g-blu)"></span>`:''}${x.r?`<span style="height:${h(x.r)}px;background:var(--g-amb)"></span>`:''}</div>
+    <span class="tg">${x.tg==='UNICA'?'unica':esc(x.tg)}</span></div>`).join('')}</div>`}
 function vStorico(){
   const D=derive();const tutte=stagioniNote(D);const ora=D.set.stagione||'';
   const stag=tutte.includes(S.ui.stagStorico)?S.ui.stagStorico:ora;
@@ -1560,9 +1617,10 @@ function vStorico(){
     <button type="button" id="t_magTab_materiale" data-act="magTab" data-v="materiale" aria-pressed="false">Materiale</button>
     <button type="button" id="t_magTab_storico" data-act="magTab" data-v="storico" aria-pressed="true">Storico e ordini</button></div>
     <span class="opzMag">${sel}</span>${corrente?'<button type="button" class="btn primary" data-act="salvaOrdine">Salva come ordine</button>':''}<button type="button" class="btn" data-act="scaricaStorico">Scarica in Excel</button></div>`;
-  h+=legenda(`<p>Per ogni articolo e taglia del materiale, i conti della stagione scelta in alto: <b>rimaste dalla stagione prima</b> (nella prima stagione, i pezzi di partenza), <b>arrivate</b> (anche gli ordini a metà stagione), <b>a disposizione</b> (la somma delle due), <b>distribuite</b> (consegne meno rientri, ad atleti, staff ed esterni) e <b>rimaste ora</b>. Per gli articoli con inventari o pezzi dismessi compare anche la colonna <b>correzioni</b>. Le divise da gara non sono comprese: si contano una per una in Divise.</p>
+  h+=legenda(`<p>Per ogni articolo e taglia del materiale, i conti della stagione scelta in alto: <b>rimaste dalla stagione prima</b> (nella prima stagione, i pezzi di partenza), <b>arrivate</b> (anche gli ordini a metà stagione), <b>a disposizione</b> (la somma delle due), <b>distribuite</b> (consegne meno rientri, ad atleti, staff ed esterni) e <b>rimaste ora</b>. Per gli articoli con inventari o pezzi dismessi compare anche la colonna <b>correzioni</b>. Sopra la tabella di un articolo con più taglie, un grafico mostra per ogni taglia le distribuite e le rimaste ora: si vede dove si consuma di più e dove avanza merce. Le divise da gara non sono comprese: si contano una per una in Divise.</p>
     <p>Nella stagione in corso <b>da ordinare</b> propone quanto ordinare per la prossima: distribuite + richieste ancora aperte + scorta − rimaste ora − già in arrivo. La scorta è il ${esc(percScorta(D))}% delle distribuite (almeno un pezzo per le taglie usate; si cambia in Impostazioni). I numeri si possono correggere; <b>Salva come ordine</b> li aggiunge agli ordinati al fornitore, che si riducono automaticamente quando si registra l'arrivo della merce. <b>Scarica in Excel</b> salva la tabella con i numeri scritti.</p>`);
   if(!voci.length)return h+`<div class="list"><p class="empty">Nessun movimento di materiale registrato in questa stagione.</p></div>`;
+  h+=`<div class="grLeg"><span><i style="background:var(--g-blu)"></i>distribuite</span><span><i style="background:var(--g-amb)"></i>rimaste ora</span><span>il numero sopra ogni colonna è la somma</span></div>`;
   const perArt={};for(const x of voci)(perArt[x.art]=perArt[x.art]||[]).push(x);
   const nomi=Object.keys(perArt).sort((a,b)=>artLabel(a).localeCompare(artLabel(b),'it'));
   const n=v=>v?String(v):'—';
@@ -1574,7 +1632,7 @@ function vStorico(){
     const riga=x=>{const k=D.key(x.art,x.tg);const scritto=S.ui.ordEdit&&S.ui.ordEdit[k]!=null?S.ui.ordEdit[k]:x.da;
       return `<tr><td>${x.tg==='UNICA'?'unica':esc(x.tg)}</td><td class="num">${n(x.prima)}</td><td class="num">${n(x.arrivate)}</td><td class="num"><b>${n(x.disp)}</b></td><td class="num">${n(x.distr)}</td>${conCorr?`<td class="num">${x.corr?(x.corr>0?'+':'')+x.corr:'—'}</td>`:''}<td class="num${x.ora<0?' neg':''}"><b>${n(x.ora)}</b></td>${corrente?`<td class="num">${n(x.aperte)}</td><td class="num">${n(x.inArrivo)}</td><td class="num">${n(x.scorta)}</td><td class="num"><input type="number" class="ordIn" min="0" max="9999" inputmode="numeric" data-k="${esc(k)}" value="${esc(scritto)}" aria-label="Da ordinare ${esc(artLabel(x.art))} ${esc(x.tg)}">${String(scritto)!==String(x.da)?`<small class="propOrig">proposta ${x.da}</small>`:''}</td>`:''}</tr>`};
     const piede=ts.length>1?`<tfoot><tr><td>Totale</td><td class="num">${n(tot('prima'))}</td><td class="num">${n(tot('arrivate'))}</td><td class="num"><b>${n(tot('disp'))}</b></td><td class="num">${n(tot('distr'))}</td>${conCorr?`<td class="num">${tot('corr')||'—'}</td>`:''}<td class="num"><b>${n(tot('ora'))}</b></td>${corrente?`<td class="num">${n(tot('aperte'))}</td><td class="num">${n(tot('inArrivo'))}</td><td class="num">${n(tot('scorta'))}</td><td class="num">${n(ts.reduce((s2,x)=>{const k=D.key(x.art,x.tg);const w2=S.ui.ordEdit&&S.ui.ordEdit[k];return s2+(w2!=null?Math.max(0,Math.round(Number(w2))||0):x.da)},0))}</td>`:''}</tr></tfoot>`:'';
-    h+=`<div class="group-head"><h2>${esc(artLabel(a))}</h2></div><div class="table-wrap"><table class="storico"><thead><tr>${testa}</tr></thead><tbody>${ts.map(riga).join('')}</tbody>${piede}</table></div>`}
+    h+=`<div class="group-head"><h2>${esc(artLabel(a))}</h2></div>${ts.length>1?graficoTaglie(ts):''}<div class="table-wrap"><table class="storico"><thead><tr>${testa}</tr></thead><tbody>${ts.map(riga).join('')}</tbody>${piede}</table></div>`}
   return h}
 /* I numeri scritti a mano nella colonna Da ordinare restano finche' non si
    salva: la pagina si ridisegna a ogni modifica dell'archivio. */
@@ -1941,13 +1999,13 @@ function vManuale(){
 
   ${sezione('Le schermate',`
     <p>In ogni schermata, tranne la pagina iniziale e il manuale, e nella scheda di ciascun atleta, la voce <b>Come funziona questa schermata</b> ne riassume l'uso e il significato dei colori.</p>
-    <p><b>Squadre</b> — due schede. <i>Atleti</i>: una riga per squadra, con nome, numero di atleti, stato delle impostazioni e i pulsanti <b>Consegna o ritira a tutti</b>, <b>Scarica foglio</b> e <b>Impostazioni</b> (nome, lotto, numeri in comune, ordine di distribuzione, «in distribuzione» ed eliminazione, possibile solo per una squadra senza atleti); con poco spazio i pulsanti si accorciano in «A tutti», «Foglio» e ⚙; con <b>+</b> si visualizzano gli atleti, modificabili direttamente sulla riga, e con <b>Apri</b> si accede alla loro scheda. <i>Riepilogo</i>: la dotazione attuale di ogni atleta e i numeri in uso in ciascuna squadra. Le due schede hanno gli stessi filtri (nome, squadra, numero di maglia) e gli stessi pulsanti <b>Aggiungi atleta</b> e <b>Aggiungi squadra</b>. Gli atleti la cui squadra non è più nell'elenco compaiono in fondo, con il pulsante per aggiungerla.</p>
+    <p><b>Squadre</b> — due schede. <i>Atleti</i>: una riga per squadra, con nome, numero di atleti, stato delle impostazioni e i pulsanti <b>Consegna o ritira a tutti</b>, <b>Scarica foglio</b> e <b>Impostazioni</b> (nome, lotto, numeri in comune, ordine di distribuzione, «in distribuzione» ed eliminazione, possibile solo per una squadra senza atleti); con poco spazio i pulsanti si accorciano in «A tutti», «Foglio» e ⚙; con <b>+</b> si visualizzano gli atleti, modificabili direttamente sulla riga, e con <b>Apri</b> si accede alla loro scheda. <i>Riepilogo</i>: in cima il grafico <b>Avanzamento della distribuzione</b> (per ogni squadra i pezzi già consegnati in questa stagione, le richieste pronte e quelle da ordinare, con la percentuale consegnata), sotto la dotazione attuale di ogni atleta e i numeri in uso in ciascuna squadra. Le due schede hanno gli stessi filtri (nome, squadra, numero di maglia) e gli stessi pulsanti <b>Aggiungi atleta</b> e <b>Aggiungi squadra</b>. Gli atleti la cui squadra non è più nell'elenco compaiono in fondo, con il pulsante per aggiungerla.</p>
     <p><b>Scheda dell'atleta</b> — divise, materiale e richieste dell'atleta, con i pulsanti <b>Consegna diretta</b>, <b>Nuova richiesta</b> e <b>Modifica atleta</b>. Ogni richiesta si modifica con ✎ e si elimina con ✕. Una nuova richiesta indica articolo e taglia e, per le divise, il tipo (divisa della squadra o maglia da libero) e l'eventuale numero desiderato; può riportare una nota. <b>Aggiungi e continua</b> registra la richiesta e lascia aperta la finestra per la successiva; lo stesso pulsante si trova in <b>Aggiungi divisa</b>.</p>
     <p><b>Assegnazioni</b> — due schede. <i>Richieste</i>: le richieste aperte, raggruppate per squadra, con il capo proposto dal programma e i filtri per nome, squadra, esito, articolo e numero. <i>Da ordinare</i>: i pezzi da ordinare al fornitore, per articolo e taglia, al netto di quelli già ordinati. In alto, tre riquadri riportano quante richieste sono pronte, da ordinare ed escluse; il numero sulla scheda <i>Da ordinare</i> indica i pezzi da ordinare.</p>
     <p><b>Magazzino</b> — tre schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo, <b>Aggiungi lotto</b> e <b>Modifica lotto</b> gestiscono i lotti e le squadre che li usano. Il campo «n. maglia» cerca un numero; <b>Mostra anche le divise in uso</b> visualizza anche le maglie assegnate (in trasparenza). Un lotto senza maglie si può eliminare da <b>Modifica lotto</b>. In cima alla scheda sono segnalate le maglie che risultano due volte. Selezionando una maglia in magazzino, <b>Segna fuori uso</b> la lascia in magazzino (grigia e barrata) senza che venga mai assegnata, e <b>Rimetti in uso</b> la rende di nuovo assegnabile; <b>Dismetti</b> la toglie dal magazzino (si può annullare da Movimenti). <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − da ordinare + ordinati). Selezionando una riga si apre la finestra dell'articolo: in cima si sceglie <b>Arrivo</b>, <b>Inventario</b>, <b>Dismessi</b> oppure <b>Ordine</b>, e sotto compaiono solo le caselle che servono, con un solo pulsante. <b>Aggiungi articolo</b>, in alto, crea un articolo; <b>Modifica articolo</b>, accanto al nome, ne cambia codice, famiglia, nome, stagione e taglie. Gli articoli di taglia unica mostrano i valori accanto al nome, senza tabella. In alto, <b>Riconto</b> scarica e ricarica il foglio per contare tutto il magazzino in una volta (vedi sotto). Eventuali incongruenze sono segnalate in cima alla scheda. <i>Storico e ordini</i>: i conti di ogni stagione e la proposta d'ordine per la successiva (vedi sotto).</p>
     <p><b>Movimenti</b> — il registro di consegne, rientri, arrivi e rettifiche, dal più recente; vengono mostrati gli ultimi 150, con il pulsante per visualizzarli tutti. La ricerca per atleta o articolo e il filtro per tipo restringono l'elenco; <b>Scarica il registro</b> salva tutti i movimenti in un foglio Excel. <b>Consegna a staff ed esterni</b> registra il materiale dato ad allenatori, dirigenti o esterni, o restituito da loro.</p>
     <p><b>Riconto del magazzino</b> — in Magazzino → Materiale, <b>Riconto → Scarica</b> salva un foglio con ogni articolo e taglia e i pezzi che risultano; si scrivono i pezzi contati (vuota = non contata, 0 = nessun pezzo) e con <b>Riconto → Carica</b> le differenze diventano rettifiche d'inventario, registrate insieme e annullabili dall'esito. La differenza si calcola sul numero del foglio, quindi le consegne fatte dopo lo scarico restano valide. Le divise da gara si controllano una per una in Divise.</p>
-    <p><b>Storico e ordini</b> — in Magazzino, la terza scheda: per ogni articolo e taglia del materiale, nella stagione scelta, rimaste dalla stagione prima, arrivate, a disposizione, distribuite e rimaste ora. Nella stagione in corso propone quanto ordinare per la successiva (distribuite + richieste aperte + scorta − rimaste − già in arrivo); i numeri si correggono a mano, <b>Salva come ordine</b> li aggiunge agli ordinati al fornitore e <b>Scarica in Excel</b> salva la tabella. La percentuale di scorta si imposta in Impostazioni (25% se non indicata). A fine stagione l'ordine si prepara <b>prima</b> di «Chiudi la stagione» in Impostazioni: la proposta si basa sulle consegne della stagione in corso, e con la stagione nuova i conti ripartono da zero (le rimaste diventano «rimaste dalla stagione prima»). Le stagioni passate restano consultabili dal menu in alto.</p>
+    <p><b>Storico e ordini</b> — in Magazzino, la terza scheda: per ogni articolo e taglia del materiale, nella stagione scelta, rimaste dalla stagione prima, arrivate, a disposizione, distribuite e rimaste ora. Sopra la tabella di ogni articolo con più taglie, un grafico mostra per taglia le distribuite e le rimaste ora. Nella stagione in corso propone quanto ordinare per la successiva (distribuite + richieste aperte + scorta − rimaste − già in arrivo); i numeri si correggono a mano, <b>Salva come ordine</b> li aggiunge agli ordinati al fornitore e <b>Scarica in Excel</b> salva la tabella. La percentuale di scorta si imposta in Impostazioni (25% se non indicata). A fine stagione l'ordine si prepara <b>prima</b> di «Chiudi la stagione» in Impostazioni: la proposta si basa sulle consegne della stagione in corso, e con la stagione nuova i conti ripartono da zero (le rimaste diventano «rimaste dalla stagione prima»). Le stagioni passate restano consultabili dal menu in alto.</p>
     <p><b>Avviso di scorta bassa</b> — aggiungendo o modificando una richiesta, oppure consegnando un articolo senza richiesta (consegna diretta, a tutta la squadra o a staff ed esterni), il programma avvisa se in magazzino non ce n’è oppure se di quell’articolo, in quella taglia, ne restano da assegnare meno della soglia scelta in Impostazioni (5 se non indicata): l'avviso si intitola <b>Non disponibile</b> se l'articolo è finito o la richiesta risulta da ordinare, <b>Scorta bassa</b> se ne restano pochi, e resta aperto finché non si preme <b>Chiudi</b>. Il conto toglie quanto è già prenotato per altre richieste e quanto risulta già da ordinare.</p>
     <p><b>Esito delle richieste</b> — in Assegnazioni e nella scheda dell'atleta ogni richiesta ha un esito: <b>Pronta</b> (il capo c'è ed è prenotato per questa richiesta: si può consegnare), <b>Da ordinare</b> (in magazzino non basta: il capo va ordinato al fornitore), <b>Esclusa</b> (la squadra o l'articolo non sono in distribuzione, oppure l'atleta non è attivo o ha l'eliminazione in attesa di riconsegna), <b>Altra squadra</b> (atleta in due squadre: il materiale lo riceve una volta sola, con la scheda dell'altra squadra).</p>
     <p><b>Prima e dopo un caricamento</b> — caricando un foglio, il programma prima lo controlla senza scrivere niente e mostra il riepilogo: cosa verrà aggiunto, le righe con errori (che non vengono caricate), gli avvisi da verificare e, per il foglio delle squadre, le <b>scorte da controllare</b>, cioè gli articoli che dopo il caricamento resterebbero sotto la soglia di avviso o da ordinare. Solo premendo <b>Carica</b> i dati vengono scritti. Appena finito si apre l'esito, che si riapre in Squadre con <b>Rivedi</b>; prima di scrivere viene salvata una copia dei dati, e dall'esito <b>Annulla questo caricamento</b> riporta tutto a com'era.</p>
