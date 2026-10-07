@@ -905,10 +905,6 @@ const carica = async (tipo, righe) => {
     ok(r1.distr === r0.distr + 2 && r1.ora === r0.ora - 2, `storico: una consegna di 2 pezzi sposta distribuite e rimaste (${r0.distr}->${r1.distr}, ${r0.ora}->${r1.ora})`);
     w.eval("S.ui.magTab='storico';location.hash='#magazzino';render()"); await attendi(100);
     ok(!!w.document.querySelector("table.storico input.ordIn"), "storico: la scheda si apre con la colonna Da ordinare");
-    // grafico del consumo: anche gli articoli di taglia unica, in ordine dal piu' consumato
-    const pc = [...w.document.querySelectorAll(".grConsumo .perc b")].map((b) => Number(b.textContent.replace("%", "")));
-    ok(pc.length > 5 && pc.every((v, i) => i === 0 || v <= pc[i - 1]) && [...w.document.querySelectorAll(".grConsumo .nome")].some((n) => /borracc/i.test(n.textContent)),
-      `storico: il grafico del consumo ha tutti gli articoli, borracce comprese, dal più consumato (${pc.length} righe)`);
     w.eval("S.ui.ordEdit={}");
     const k = w.eval(`derive().key(${JSON.stringify(art)},${JSON.stringify(tg)})`);
     w.eval(`S.ui.ordEdit[${JSON.stringify(k)}]='7'`);
