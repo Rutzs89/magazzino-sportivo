@@ -999,6 +999,75 @@ const carica = async (tipo, righe) => {
     ok(a0 >= 2 && aperte() === a0 - 2, `consegna diretta di 2 pezzi: si chiudono 2 richieste (${a0} -> ${aperte()})`);
   }
 
+  /* 9v. taglie di un articolo: rinominare cambia tutto l'archivio; una taglia
+     rimasta fuori dall'elenco si unisce alla nuova; una usata non si toglie */
+  {
+    const salvaArticolo = async (i, f) => {
+      w.eval(`dlgArticolo(${i})`); await attendi(100);
+      f(w.document); w.document.querySelector("#dlgForm").requestSubmit(); await attendi(800);
+      w.eval("document.querySelectorAll('dialog[open]').forEach(d=>d.close())");
+    };
+    const [i, art, tg] = w.eval(`(()=>{const D=derive();const i=D.set.articoli.findIndex(a=>!a.conNumero&&(a.taglie||[]).length>2&&a.taglie.some(t=>(D.stock[D.key(a.nome,t)]||{ora:0}).ora>0));
+      const a=D.set.articoli[i];return [i,a.nome,a.taglie.find(t=>(D.stock[D.key(a.nome,t)]||{ora:0}).ora>0)]})()`);
+    const giac = (t) => w.eval(`(derive().stock[derive().key(${JSON.stringify(art)},${JSON.stringify(t)})]||{ora:0}).ora`);
+    const quante = (t) => w.eval(`Object.values(S.materiale).concat(Object.values(S.movimenti),Object.values(S.richieste)).filter(x=>x.articolo===${JSON.stringify(art)}&&x.taglia===${JSON.stringify(t)}).length`);
+    const g0 = giac(tg), n0 = quante(tg);
+    await salvaArticolo(i, (d) => { d.querySelector(`.tgRiga[data-orig="${tg}"] input`).value = tg + "X"; });
+    ok(giac(tg + "X") === g0 && quante(tg) === 0 && quante(tg + "X") === n0 && w.eval(`derive().set.articoli[${i}].taglie.includes(${JSON.stringify(tg + "X")})`) && !w.eval(`derive().set.articoli[${i}].taglie.includes(${JSON.stringify(tg)})`),
+      `taglie: rinominare ${tg} sposta pezzi, richieste e movimenti (${n0} registrazioni, ${g0} pezzi)`);
+    // come prima di questa versione: elenco cambiato a mano e pezzi spostati con due inventari
+    const nuovo = tg + "/Y";
+    await w.eval(`(async()=>{const D=derive();const arts=[...D.set.articoli];arts[${i}]={...arts[${i}],taglie:arts[${i}].taglie.map(t=>t===${JSON.stringify(tg + "X")}?${JSON.stringify(nuovo)}:t)};
+      await S.db.doc('settings/main').update({articoli:arts});
+      await mov({tipo:'RETTIFICA',articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg + "X")},qta:-${g0},note:'prova'});
+      await mov({tipo:'RETTIFICA',articolo:${JSON.stringify(art)},taglia:${JSON.stringify(nuovo)},qta:${g0},note:'prova'})})()`);
+    await attendi(300);
+    w.eval(`dlgArticolo(${i})`); await attendi(100);
+    const fuori = !!w.document.querySelector(`.tgRiga.tgFuori[data-orig="${tg}X"]`);
+    w.eval("document.querySelectorAll('dialog[open]').forEach(d=>d.close())");
+    // togliere una taglia con registrazioni: rifiutato
+    await salvaArticolo(i, (d) => { d.querySelector(`.tgRiga[data-orig="${tg}X"]`).remove(); });
+    const ancora = quante(tg + "X") > 0;
+    await salvaArticolo(i, (d) => { d.querySelector(`.tgRiga[data-orig="${tg}X"] input`).value = nuovo; });
+    ok(fuori && ancora && quante(tg + "X") === 0 && giac(nuovo) === g0 && !w.eval(`derive().set.articoli[${i}].taglie.includes(${JSON.stringify(tg + "X")})`),
+      "taglie: la taglia rimasta fuori dall'elenco si vede, non si toglie se usata, e si unisce alla nuova con i pezzi sommati");
+    // si rimette com'era, per le prove dopo
+    await salvaArticolo(i, (d) => { d.querySelector(`.tgRiga[data-orig="${nuovo}"] input`).value = tg; });
+    // una taglia vuota (con soli movimenti passati) si toglie e sparisce anche da Materiale
+    const vuota = "ZZ";
+    await salvaArticolo(i, (d) => { d.querySelector("#acTgAgg").click(); d.querySelector("#acTgLista").lastElementChild.querySelector("input").value = vuota; });
+    if (w.eval(`derive().set.articoli[${i}].taglie.includes("ZZ")`)) {
+      await w.eval(`mov({tipo:'CARICO',articolo:${JSON.stringify(art)},taglia:${JSON.stringify(vuota)},qta:1});`); await attendi(150);
+      await w.eval(`mov({tipo:'SCARTO',articolo:${JSON.stringify(art)},taglia:${JSON.stringify(vuota)},qta:1});`); await attendi(200);
+      await salvaArticolo(i, (d) => { d.querySelector(`.tgRiga[data-orig="${vuota}"]`).remove(); });
+      w.eval("S.ui.magTab='materiale';location.hash='#magazzino';render()"); await attendi(100);
+      const righeTg = [...w.document.querySelectorAll("tr[data-act=matRow]")].filter((r) => r.dataset.art === art).map((r) => r.dataset.tg);
+      ok(!w.eval(`derive().set.articoli[${i}].taglie.includes(${JSON.stringify(vuota)})`) && righeTg.length > 0 && !righeTg.includes(vuota),
+        `taglie: la taglia vuota ${vuota} si toglie e non compare più in Materiale, anche con movimenti passati`);
+      w.eval("S.ui.magTab='divise';render()");
+    }
+  }
+
+  /* 9w. ordine delle taglie: le frecce lo cambiano e vale anche in Materiale */
+  {
+    const i = w.eval("derive().set.articoli.findIndex(a=>!a.conNumero&&(a.taglie||[]).length>=3)");
+    const prima = w.eval(`ordineArticolo(derive().set.articoli[${i}])`);
+    w.eval(`dlgArticolo(${i})`); await attendi(100);
+    w.document.querySelector("#acTgLista .tgRiga .tgGiu").click();
+    w.document.querySelector("#dlgForm").requestSubmit(); await attendi(500);
+    const dopo = w.eval(`derive().set.articoli[${i}].taglie`);
+    const art = w.eval(`derive().set.articoli[${i}].nome`);
+    w.eval("S.ui.magTab='materiale';location.hash='#magazzino';render()"); await attendi(100);
+    const righe = [...w.document.querySelectorAll("tr[data-act=matRow]")].filter((r) => r.dataset.art === art).map((r) => r.dataset.tg).filter((t) => dopo.includes(t));
+    ok(dopo[0] === prima[1] && dopo[1] === prima[0] && w.eval(`derive().set.articoli[${i}].ordineManuale`) === true && righe[0] === dopo[0] && righe[1] === dopo[1],
+      `taglie: la freccia sposta ${prima[0]} dopo ${prima[1]}, e Materiale segue l'ordine nuovo`);
+    // si rimette com'era
+    w.eval(`dlgArticolo(${i})`); await attendi(100);
+    w.document.querySelector("#acTgLista .tgRiga .tgGiu").click();
+    w.document.querySelector("#dlgForm").requestSubmit(); await attendi(500);
+    w.eval("S.ui.magTab='divise';render()");
+  }
+
   /* 9g. divisa dismessa: si annulla da Movimenti */
   {
     const id = w.eval("Object.keys(S.divise).find(k=>!S.divise[k].holder&&!S.divise[k].dismessa)");
