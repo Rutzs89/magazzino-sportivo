@@ -937,7 +937,7 @@ const carica = async (tipo, righe) => {
   {
     await w.eval("scaricaRiconto()"); await attendi(300);
     const f = fogliScritti["Riconto"];
-    ok(!!f && f.intestazioni.join("|") === "Articolo|Taglia|Nel programma|Contati|Foglio del" && f.righe.length > 5, `riconto: il foglio si scarica (${f && f.righe.length} righe)`);
+    ok(!!f && f.intestazioni.join("|") === "Articolo|Taglia|Nel programma|Contati|Motivo|Foglio del" && f.righe.length > 5, `riconto: il foglio si scarica (${f && f.righe.length} righe)`);
     const conPezzi = f.righe.filter((r) => Number(r[2]) >= 5);
     const [ra, rb] = conPezzi;
     const chiave = (r) => w.eval(`(()=>{const D=derive();const a=articoloDaNome(D,${JSON.stringify(r[0])});return D.key(a.nome,${JSON.stringify(r[1])}==='unica'?'UNICA':${JSON.stringify(r[1])})})()`);
@@ -950,7 +950,7 @@ const carica = async (tipo, righe) => {
     const ia = f.righe.indexOf(ra), ib = f.righe.indexOf(rb);
     righe[ia][3] = String(Number(ra[2]) - 2); // contati 2 in meno di quelli del foglio
     righe[ib][3] = String(Number(rb[2]));     // uguale: nessuna rettifica
-    daLeggere = [["Solo informative", "", "", "Da compilare", "Solo informative"], f.intestazioni, ...righe];
+    daLeggere = [["Solo informative", "", "", "Da compilare", "", "Solo informative"], f.intestazioni, ...righe];
     const nRett = () => Object.values(w.eval("S.movimenti")).filter((m) => m.tipo === "RETTIFICA").length;
     const r0 = nRett(), gA = giac(ka), gB = giac(kb);
     await w.eval("caricaRiconto()"); await attendi(900);
@@ -965,7 +965,7 @@ const carica = async (tipo, righe) => {
     ok(nRett() === r2 && giac(ka) === gA2, "riconto: ricaricando lo stesso foglio la rettifica non si ripete");
     // una riga senza taglia per un articolo che ha le taglie: rifiutata
     const conTaglie = f.righe.find((r) => r[1] !== "unica");
-    daLeggere = [["Solo informative", "", "", "Da compilare"], f.intestazioni, [conTaglie[0], "", conTaglie[2], "3", conTaglie[4]]];
+    daLeggere = [["Solo informative", "", "", "Da compilare"], f.intestazioni, [conTaglie[0], "", conTaglie[2], "3", "", conTaglie[5]]];
     const r3 = nRett();
     await w.eval("caricaRiconto()"); await attendi(400);
     ok(nRett() === r3 && /manca la taglia/.test((w.eval("S.app.esitoExcel").problemi || []).join(" ")), "riconto: senza taglia, per un articolo con le taglie, la riga è rifiutata");
@@ -1066,6 +1066,59 @@ const carica = async (tipo, righe) => {
     w.document.querySelector("#acTgLista .tgRiga .tgGiu").click();
     w.document.querySelector("#dlgForm").requestSubmit(); await attendi(500);
     w.eval("S.ui.magTab='divise';render()");
+  }
+
+  /* 9x. stagione di consegna dei capi: etichetta dal movimento, cambiabile a
+     mano anche con stagioni vecchie, senza toccare la stagione vera */
+  {
+    const aid = w.eval("Object.keys(S.atlete).find(k=>puoRicevere(S.atlete[k]))");
+    const [art, tg] = w.eval(`(()=>{const D=derive();const a=D.set.articoli.find(a=>!a.conNumero&&(a.taglie||[]).length>1);return [a.nome,a.taglie[1]]})()`);
+    const stag = w.eval("derive().set.stagione");
+    await w.eval(`mov({tipo:'CONSEGNA',atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:2})`); await attendi(200);
+    const lotti = () => w.eval(`lottiDotazione(${JSON.stringify(aid)})[${JSON.stringify(art + "|" + tg)}]`);
+    const l0 = lotti();
+    w.eval(`location.hash='#atleta/'+${JSON.stringify(aid)};render()`); await attendi(100);
+    const btn = w.document.querySelector(`.etSt[data-art="${art}"][data-tg="${tg}"]`);
+    ok(l0 && l0.length === 1 && l0[0].lab === stag && l0[0].n >= 2 && btn && btn.textContent.includes(w.eval(`etCorta(${JSON.stringify(stag)})`)),
+      `stagione di consegna: l'etichetta nasce dalla stagione del movimento (${btn && btn.textContent})`);
+    w.eval(`dlgEtichetta(${JSON.stringify(aid)},${JSON.stringify(art)},${JSON.stringify(tg)},${JSON.stringify(stag)})`); await attendi(100);
+    w.document.querySelector("#etSt").value = "21/22";
+    w.document.querySelector("#dlgForm").requestSubmit(); await attendi(400);
+    const l1 = lotti();
+    const stagVere = w.eval(`Object.values(S.movimenti).filter(m=>m.atletaId===${JSON.stringify(aid)}&&m.articolo===${JSON.stringify(art)}&&m.taglia===${JSON.stringify(tg)}).every(m=>m.stagione===${JSON.stringify(stag)})`);
+    ok(l1.length === 1 && l1[0].lab === "2021/22" && stagVere, "stagione di consegna: cambiata a mano con una stagione vecchia, la stagione vera del movimento resta");
+    await w.eval(`mov({tipo:'RIENTRO',atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:1})`); await attendi(200);
+    await w.eval(`mov({tipo:'CONSEGNA',atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:1})`); await attendi(200);
+    const l2 = lotti();
+    const vecchi = (l2.find((x) => x.lab === "2021/22") || {}).n, nuovi = (l2.find((x) => x.lab === stag) || {}).n;
+    ok(vecchi === l1[0].n - 1 && nuovi === 1, `stagione di consegna: il rientro toglie dal pezzo più vecchio, la consegna nuova ha la sua etichetta (${vecchi} + ${nuovi})`);
+    w.eval("location.hash='#atlete';render()");
+  }
+
+  /* 9y. motivo delle differenze: consegnati = distribuite, arrivati = arrivate,
+     errore = inventari e dismessi; la giacenza e' sempre il numero contato */
+  {
+    const [art, tg] = w.eval(`(()=>{const D=derive();const x=Object.values(storicoStagione(D,D.set.stagione)).find(x=>x.ora>=6);return [x.art,x.tg]})()`);
+    const riga = () => w.eval(`storicoStagione(derive(),derive().set.stagione)[derive().key(${JSON.stringify(art)},${JSON.stringify(tg)})]`);
+    const inventario = async (contati, causa) => {
+      w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`); await attendi(100);
+      const d = w.document; d.querySelector('input[name="azione"][value="rett"]').click();
+      d.querySelector("#mQ").value = String(contati); d.querySelector("#mQ").dispatchEvent(new w.Event("input"));
+      if (causa) d.querySelector("#mCausa").value = causa;
+      d.querySelector("#dlgForm").requestSubmit(); await attendi(400);
+    };
+    const r0 = riga();
+    await inventario(r0.ora - 2);                 // motivo proposto: consegnati senza registrarli
+    const r1 = riga();
+    await inventario(r1.ora - 1, "persi");
+    const r2 = riga();
+    await inventario(r2.ora + 3, "arrivati");
+    const r3 = riga();
+    ok(r1.distr === r0.distr + 2 && r1.corr === r0.corr && r1.ora === r0.ora - 2
+      && r2.corr === r1.corr - 1 && r2.distr === r1.distr
+      && r3.arrivate === r2.arrivate + 3 && r3.ora === r2.ora + 3
+      && w.eval(`(derive().stock[derive().key(${JSON.stringify(art)},${JSON.stringify(tg)})]||{}).ora`) === r3.ora,
+      `motivo delle differenze: ogni rettifica va nella sua colonna e la giacenza resta quella contata (${r0.ora} -> ${r3.ora})`);
   }
 
   /* 9g. divisa dismessa: si annulla da Movimenti */
