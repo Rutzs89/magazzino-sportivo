@@ -905,6 +905,21 @@ const carica = async (tipo, righe) => {
     ok(r1.distr === r0.distr + 2 && r1.ora === r0.ora - 2, `storico: una consegna di 2 pezzi sposta distribuite e rimaste (${r0.distr}->${r1.distr}, ${r0.ora}->${r1.ora})`);
     w.eval("S.ui.magTab='storico';location.hash='#magazzino';render()"); await attendi(100);
     ok(!!w.document.querySelector("table.storico input.ordIn"), "storico: la scheda si apre con la colonna Da ordinare");
+    // un pezzo di codice a schermo (titolo fra apici semplici: «${esc(percScorta(D))}»
+    // si vedeva com'era, 0.3.28-0.3.29) vale per ogni pagina: testi e attributi
+    {
+      const codice = [];
+      for (const [h, tab] of [["#home"], ["#squadre"], ["#assegnazioni"], ["#magazzino", "divise"], ["#magazzino", "materiale"], ["#magazzino", "storico"], ["#movimenti"], ["#impostazioni"], ["#manuale"]]) {
+        if (tab) w.eval(`S.ui.magTab=${JSON.stringify(tab)}`);
+        w.location.hash = h; await attendi(60); w.eval("render()");
+        const d = w.document; const tw = d.createTreeWalker(d.body, w.NodeFilter.SHOW_TEXT); const t = [];
+        for (let n; (n = tw.nextNode());) if (!n.parentElement.closest("script,style")) t.push(n.nodeValue);
+        for (const el of d.body.querySelectorAll("*")) if (!el.closest("script,style")) for (const a of el.attributes) t.push(a.value);
+        for (const x of t) if (/\$\{|esc\(/.test(x)) codice.push(`${h}${tab ? ":" + tab : ""}: ${x.slice(0, 60)}`);
+      }
+      ok(!codice.length, `nessun pezzo di codice a schermo${codice.length ? ": " + codice.slice(0, 3).join(" | ") : ""}`);
+      w.eval("S.ui.magTab='storico';location.hash='#magazzino';render()"); await attendi(60);
+    }
     w.eval("S.ui.ordEdit={}");
     const k = w.eval(`derive().key(${JSON.stringify(art)},${JSON.stringify(tg)})`);
     w.eval(`S.ui.ordEdit[${JSON.stringify(k)}]='7'`);
@@ -1121,6 +1136,54 @@ const carica = async (tipo, righe) => {
       `motivo delle differenze: ogni rettifica va nella sua colonna e la giacenza resta quella contata (${r0.ora} -> ${r3.ora})`);
   }
 
+  /* 9z. Sposta in un'altra stagione: i pezzi passano all'articolo gemello (creato
+     la prima volta, poi riusato), la somma non cambia, l'annullamento li riporta */
+  {
+    const [art, tg] = w.eval(`(()=>{const D=derive();const a=D.set.articoli.find(a=>!a.conNumero&&a.distribuibile!==false&&!a.base&&(a.taglie||[]).some(t=>(D.stock[D.key(a.nome,t)]||{}).ora>=6));
+      return [a.nome,a.taglie.find(t=>(D.stock[D.key(a.nome,t)]||{}).ora>=6)]})()`);
+    const ora = (a) => w.eval(`(derive().stock[derive().key(${JSON.stringify(a)},${JSON.stringify(tg)})]||{ora:0}).ora`);
+    const gemello = () => w.eval(`(derive().set.articoli.filter(a=>a.base===${JSON.stringify(art)}))`);
+    const sposta = async (q) => {
+      w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`); await attendi(100);
+      const d = w.document; d.querySelector('input[name="azione"][value="sposta"]').click();
+      const sel = d.querySelector("#mDest"); const dest = [...sel.options].find((o) => !/già/.test(o.textContent) && o.value < w.eval("derive().set.stagione")) || sel.options[0];
+      sel.value = dest.value; d.querySelector("#mQ").value = String(q);
+      d.querySelector("#dlgForm").requestSubmit(); await attendi(400); return dest.value;
+    };
+    const s0 = ora(art);
+    const dest = await sposta(3);
+    const g1 = gemello();
+    const n1 = g1.length === 1 ? g1[0].nome : null;
+    ok(g1.length === 1 && g1[0].stagione === dest && g1[0].distribuibile === false && ora(art) === s0 - 3 && ora(n1) === 3,
+      `sposta: 3 pezzi passano alla stagione ${dest}, creata sotto l'articolo e non da consegnare (${s0} -> ${ora(art)} + ${n1 && ora(n1)})`);
+    w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`); await attendi(100);
+    w.document.querySelector('input[name="azione"][value="sposta"]').click();
+    w.document.querySelector("#mDest").value = dest; w.document.querySelector("#mQ").value = "2";
+    w.document.querySelector("#dlgForm").requestSubmit(); await attendi(400);
+    ok(gemello().length === 1 && ora(art) === s0 - 5 && ora(n1) === 5, "sposta: la seconda volta usa la stessa stagione, senza un articolo nuovo");
+    w.eval("S.ui.magTab='materiale';location.hash='#magazzino';render()"); await attendi(100);
+    const box = [...w.document.querySelectorAll(".artBox.gruppoStag")].find((b) => b.querySelector(`[data-art="${n1}"]`) && b.querySelector(`[data-art="${art}"]`));
+    ok(!!box && box.querySelectorAll(".artStag").length === 2, "Materiale: le due stagioni stanno nello stesso riquadro, una sotto l'altra");
+    w.eval("document.querySelectorAll('dialog[open]').forEach(d=>d.close())");
+    const ultimo = w.eval(`Object.entries(S.movimenti).filter(([,m])=>m.causa==='spostati').sort((x,y)=>y[1].ts-x[1].ts)[0][0]`);
+    await w.eval(`annullaMovimento(${JSON.stringify(ultimo)})`); await attendi(400);
+    ok(ora(art) === s0 - 3 && ora(n1) === 3, "sposta: annullando, i pezzi tornano tutti e due insieme");
+    w.eval(`dlgMat(${JSON.stringify(art)},${JSON.stringify(tg)})`); await attendi(100);
+    w.document.querySelector('input[name="azione"][value="sposta"]').click();
+    w.document.querySelector("#mDest").value = dest; w.document.querySelector("#mQ").value = String(s0 + 10);
+    w.document.querySelector("#dlgForm").requestSubmit(); await attendi(300);
+    w.eval("document.querySelectorAll('dialog[open]').forEach(d=>d.close())");
+    ok(ora(art) === s0 - 3, "sposta: non si spostano più pezzi di quelli in magazzino");
+    // «In uso»: un pezzo «già in possesso» che rientra non toglie un pezzo a un altro
+    const inUso = () => { w.eval("S.ui.magTab='materiale';location.hash='#magazzino';render()");
+      const r = w.document.querySelector(`[data-art="${art}"][data-tg="${tg}"]`); if (!r) return null;
+      return r.tagName === "TR" ? r.children[2].textContent.trim() : r.querySelectorAll("b")[1].textContent.trim(); };
+    const u0 = inUso(); const aid = w.eval("Object.keys(S.atlete)[5]");
+    await w.eval(`insieme(async()=>{await mov({tipo:'POSSESSO',atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:1});await mov({tipo:'RIENTRO',atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:1})})`); await attendi(300);
+    ok(u0 !== null && inUso() === u0, `Materiale: «In uso» non cala quando rientra un pezzo «già in possesso» (${u0} -> ${inUso()})`);
+    w.eval("location.hash='#atlete';render()");
+  }
+
   /* 9g. divisa dismessa: si annulla da Movimenti */
   {
     const id = w.eval("Object.keys(S.divise).find(k=>!S.divise[k].holder&&!S.divise[k].dismessa)");
@@ -1160,7 +1223,7 @@ const carica = async (tipo, righe) => {
     const probl = w.eval("S.app.problemiExcel") || [];
     ok(probl.length === 0, `${tipo}: il foglio scaricato si ricarica senza problemi ${probl.slice(0, 2).join("; ")}`);
   }
-  ok(JSON.stringify(conta()) === JSON.stringify(primaGiro), `ricaricare i quattro fogli non cambia niente ${JSON.stringify(conta())}`);
+  ok(JSON.stringify(conta()) === JSON.stringify(primaGiro), `ricaricare i quattro fogli non cambia niente ${JSON.stringify(conta())} (prima ${JSON.stringify(primaGiro)})`);
   // le colonne in un altro ordine: il programma le riconosce dal titolo
   for (const [i, tipo] of TIPI.entries()) {
     const ordine = fogli[i].intestazioni.map((_, k) => k).reverse();
