@@ -1198,6 +1198,7 @@ function stagioniEtichetta(D){
   const vecchie=[];if(m)for(let i=1;i<=6;i++){const a=Number(m[1])-i;vecchie.push(`${a}/${String((a+1)%100).padStart(2,'0')}`)}
   return [...note].reverse().concat(vecchie)}
 function normEtichetta(v){v=String(v||'').trim();if(!v)return null;
+  if(stagioniNote(derive()).includes(v))return v;
   if(/già|gia'|possesso/i.test(v))return ET_POSSESSO;
   const a=v.match(/^(\d{2})\/(\d{2})$/);if(a)return `20${a[1]}/${a[2]}`;
   const b=v.match(/^(\d{4})\s*[-/]\s*(\d{2}|\d{4})$/);if(b)return `${b[1]}/${b[2].slice(-2)}`;
@@ -1464,24 +1465,44 @@ function contaUsiTaglia(D,a,t){
   const ric=Object.values(S.richieste).filter(r=>r.articolo===a.nome&&r.taglia===t).length;
   const mov=Object.values(S.movimenti).filter(m=>m.articolo===a.nome&&m.taglia===t).length;
   const div=a.conNumero?Object.values(S.divise).filter(d=>!d.dismessa&&(d.taglia===t||d.tagliaChiesta===t)).length:0;
-  const ord=(D.stock[D.key(a.nome,t)]||{}).ordinati||0;
+  const st=D.stock[D.key(a.nome,t)]||{};const ord=st.ordinati||0;
+  // pezzi ancora in mano agli atleti: anche questi la tengono viva (trovato in
+  // revisione: tolta la taglia, i suoi consegnati sparivano da Materiale)
+  const fuori=inMano(D,D.key(a.nome,t));
   // «totale» = cio' che impedisce di toglierla; i movimenti passati no
-  return {mat,pezzi,ric,mov,div,ord,totale:(pezzi?1:0)+ric+div+(ord?1:0)}}
+  return {mat,pezzi,ric,mov,div,ord,fuori,totale:(pezzi?1:0)+ric+div+(ord?1:0)+(fuori?1:0)}}
 /* Rinomina (o unisce) le taglie in tutto l'archivio, con la copia prima e
    l'esito annullabile come per i caricamenti. */
 async function rinominaTaglie(D,a,arts,rinomine){
   const righe=rinomine.map(([o,n])=>{const u=contaUsiTaglia(D,a,o);
     const pezzi=[u.pezzi?`${u.pezzi} ${u.pezzi===1?'pezzo':'pezzi'} in magazzino`:'',u.ric?`${u.ric} ${u.ric===1?'richiesta':'richieste'}`:'',
       u.mov?`${u.mov} ${u.mov===1?'movimento':'movimenti'}`:'',u.div?`${u.div} ${u.div===1?'divisa':'divise'}`:''].filter(Boolean);
-    const unisce=(a.taglie||[]).includes(n)&&!rinomine.some(([o2])=>o2===n);
+    const unisce=((a.taglie||[]).includes(n)||taglieFuoriElenco(a).includes(n))&&!rinomine.some(([o2])=>o2===n);
     return `• ${o} ${unisce?'si unisce a':'diventa'} ${n}${pezzi.length?': '+pezzi.join(', '):': nessuna registrazione'}`});
+  // Divise: unendo due taglie non devono nascere due maglie uguali (stesso
+  // lotto, numero e taglia), che il programma non saprebbe piu' distinguere.
+  if(a.conNumero){const m0=Object.fromEntries(rinomine);const visti=new Map();const doppie=[];
+    for(const d of Object.values(S.divise)){if(d.dismessa)continue;const t=m0[d.taglia]||d.taglia;const k=(d.modello||'STANDARD')+'|'+t+'|'+d.numero;
+      // conta solo i doppioni nati dall'unione (taglie di partenza diverse): quelli
+      // che c'erano gia' non devono bloccare ogni rinomina (trovato in riverifica)
+      if(!visti.has(k))visti.set(k,new Set());visti.get(k).add(d.taglia)}
+    for(const [k,orig] of visti)if(orig.size>1){const [mod,t,n]=k.split('|');doppie.push(`${nomeLotto(mod)} ${t} n.${n}`)}
+    if(doppie.length){await avvisoFisso(`Non si può: unendo le taglie ci sarebbero maglie uguali (${[...new Set(doppie)].slice(0,5).join(', ')}). Prima va cambiato il numero o la taglia di una delle due.`);return false}}
   if(!await chiedi(`Taglie di ${artLabel(a.nome)}:\n${righe.join('\n')}\n\nPrima di scrivere viene salvata una copia dei dati; dall'esito la modifica si può annullare.`,{si:'Rinomina'}))return false;
   const mappa=Object.fromEntries(rinomine);
   const r=await scriviConRete(`Taglie di ${artLabel(a.nome)}`,async()=>{
     await S.db.doc('settings/main').update({articoli:arts});
     for(const [id,m] of Object.entries(S.materiale))if(m.articolo===a.nome&&mappa[m.taglia])await S.db.doc('materiale/'+id).update({taglia:mappa[m.taglia]});
     for(const [id,q] of Object.entries(S.richieste))if(q.articolo===a.nome&&mappa[q.taglia])await S.db.doc('richieste/'+id).update({taglia:mappa[q.taglia]});
-    for(const [id,m] of Object.entries(S.movimenti))if(m.articolo===a.nome&&mappa[m.taglia])await S.db.doc('movimenti/'+id).update({taglia:mappa[m.taglia]});
+    // anche le fotografie dentro i movimenti (richieste consegnate, taglia chiesta
+    // di prima): se no annullando una consegna tornava la taglia vecchia
+    const foto=q=>q&&q.articolo===a.nome&&mappa[q.taglia]?{...q,taglia:mappa[q.taglia]}:q;
+    for(const [id,m] of Object.entries(S.movimenti)){if(m.articolo!==a.nome)continue;const c={};
+      if(mappa[m.taglia])c.taglia=mappa[m.taglia];
+      if(m.richiesta&&foto(m.richiesta)!==m.richiesta)c.richiesta=foto(m.richiesta);
+      if(Array.isArray(m.richieste)&&m.richieste.some(q=>foto(q)!==q))c.richieste=m.richieste.map(foto);
+      if(a.conNumero&&m.prevTC&&mappa[m.prevTC])c.prevTC=mappa[m.prevTC];
+      if(Object.keys(c).length)await S.db.doc('movimenti/'+id).update(c)}
     if(a.conNumero)for(const [id,d] of Object.entries(S.divise)){const c={};
       if(mappa[d.taglia])c.taglia=mappa[d.taglia];if(d.tagliaChiesta&&mappa[d.tagliaChiesta])c.tagliaChiesta=mappa[d.tagliaChiesta];
       if(Object.keys(c).length)await S.db.doc('divise/'+id).update(c)}
@@ -1530,11 +1551,13 @@ function dlgArticolo(i){
     // nome di prima vuoto; le righe tolte con ✕ sono in tolte.
     const righeTg=[...document.querySelectorAll('#acTgLista .tgRiga')].map(r=>[r.dataset.orig||'',normTaglia(r.querySelector('input').value)]);
     if(righeTg.some(([o,n])=>o&&!n)){toast('Una taglia è senza nome: scriverlo, oppure toglierla con ✕');return false}
-    const taglie=[...new Set(righeTg.map(([,n])=>n).filter(Boolean))];
+    // una taglia tratteggiata lasciata com'e' resta fuori dall'elenco (salvando
+    // per altro, prima, tornava fra le taglie dell'articolo)
+    const taglie=[...new Set(righeTg.filter(([o,n])=>!(orfane.includes(o)&&o===n)).map(([,n])=>n).filter(Boolean))];
     const tolte=nuovo?[]:tutteTg.filter(t=>!righeTg.some(([o])=>o===t));
     const usi=t=>contaUsiTaglia(D,a,t);
     const bloccate=tolte.filter(t=>usi(t).totale);
-    if(bloccate.length){toast(`Non si può togliere ${bloccate.join(', ')}: ha ancora pezzi in magazzino, pezzi in arrivo, richieste o divise. Si può invece rinominarla o unirla a un'altra.`);return false}
+    if(bloccate.length){toast(`Non si può togliere ${bloccate.join(', ')}: ha ancora pezzi in magazzino o consegnati, pezzi in arrivo, richieste o divise. Si può invece rinominarla o unirla a un'altra.`);return false}
     const rinomine=nuovo?[]:righeTg.filter(([o,n])=>o&&n&&o!==n);
     // La spunta vale piu' della casella: se dice "di questa stagione", la
     // stagione e' quella corrente e basta.
@@ -1816,6 +1839,8 @@ async function scaricaStorico(){
    il conteggio e il caricamento restano valide e non vengono cancellate.
    Una casella «Contati» vuota vuol dire «non contato»: la riga si ignora.
    Le divise no: sono capi numerati e si controllano una per una. */
+// il nome visibile, se nessun altro articolo lo ha uguale; se no il nome vero
+function nomeUnico(D,art){const l=artLabel(art);return (D.set.articoli||[]).filter(a=>KEY(artLabel(a.nome))===KEY(l)).length>1?art:l}
 const RICONTO_COLONNE=['Articolo','Taglia','Nel programma','Contati','Motivo','Foglio del'];
 function righeRiconto(D){
   const k=new Map();
@@ -1833,7 +1858,7 @@ async function scaricaRiconto(){
     const n=new Date();const d2=x=>String(x).padStart(2,'0');
     const codice=`${fmtDate(today())} ${d2(n.getHours())}:${d2(n.getMinutes())}:${d2(n.getSeconds())}`;
     await window.__APP.scriviExcel(dove,'Riconto',RICONTO_COLONNE,
-      v.map(x=>[artLabel(x.art),x.tg==='UNICA'?'unica':x.tg,String(x.ora),'','',codice]),
+      v.map(x=>[nomeUnico(D,x.art),x.tg==='UNICA'?'unica':x.tg,String(x.ora),'','',codice]),
       guidaPerExcel(['RICONTO DEL MAGAZZINO — materiale, un articolo e una taglia per riga.','',
         `Situazione al ${fmtDate(today())}, stagione ${D.set.stagione||''}.`,'',
         'Come si compila:',
@@ -1870,12 +1895,13 @@ function leggiRiconto(D,righe){
   righe.slice(iT+1).forEach((r,i)=>{const nr=iT+i+2;
     const cont=String(r[cC]??'').trim();if(!cont)return;
     const nomeA=String(r[cA]??'').trim();const a=articoloDaNome(D,nomeA);
-    if(!a){esito.problemi.push(`Riga ${nr}: articolo «${nomeA}» non trovato`);return}
+    if(!a){const piu=(D.set.articoli||[]).filter(x=>KEY(artLabel(x.nome))===KEY(nomeA)).length>1;
+      esito.problemi.push(piu?`Riga ${nr}: «${nomeA}» è il nome di più articoli: scaricare un foglio nuovo, che li scrive per esteso`:`Riga ${nr}: articolo «${nomeA}» non trovato`);return}
     if(D.conNumero(a.nome)){esito.problemi.push(`Riga ${nr}: ${artLabel(a.nome)} ha il numero di maglia: le divise non si ricontano dal foglio`);return}
     const scritta=String(r[cT]??'').trim();
     // «unica» o vuota vale solo per un articolo senza taglie (o che ha gia' la
     // riga di taglia unica): se no nasceva una giacenza in una taglia inesistente.
-    const unica=!(a.taglie||[]).length||!!D.stock[D.key(a.nome,'UNICA')];
+    const unica=!(a.taglie||[]).length||(a.taglie||[]).includes('UNICA')||!!D.stock[D.key(a.nome,'UNICA')];
     const tg=KEY(scritta)===KEY('unica')||!scritta?(unica?'UNICA':''):(tagliaArticolo(a,scritta)||(D.stock[D.key(a.nome,scritta)]?scritta:''));
     if(!tg){esito.problemi.push(scritta?`Riga ${nr}: taglia «${scritta}» non prevista per ${artLabel(a.nome)}`:`Riga ${nr}: manca la taglia per ${artLabel(a.nome)}`);return}
     const n=Number(cont.replace(',','.'));
@@ -1889,8 +1915,10 @@ function leggiRiconto(D,righe){
     const pS=String(r[cP]??'').trim();const prima=pS===''||!Number.isFinite(Number(pS))?ora:Number(pS);
     // Lo stesso foglio caricato una seconda volta (per esempio dopo aver
     // corretto una riga rifiutata): la giacenza e' gia' il numero contato, la
-    // rettifica non si ripete. Prima si applicava due volte.
-    if(prima!==ora&&ora===n){esito.uguali++;esito.avvisi.push(`${artLabel(a.nome)} ${tg==='UNICA'?'':tg}: ne risultano già ${n}, come i contati: rettifica già registrata, ignorata`);return}
+    // rettifica non si ripete. Prima si applicava due volte. Solo per i fogli
+    // senza codice: col codice basta «fatte», e una differenza vera (consegnati 2
+    // dopo lo scarico, ne mancano 2) non va scambiata per un secondo caricamento.
+    if(!codice&&prima!==ora&&ora===n){esito.uguali++;esito.avvisi.push(`${artLabel(a.nome)} ${tg==='UNICA'?'':tg}: ne risultano già ${n}, come i contati: rettifica già registrata, ignorata`);return}
     if(prima!==ora)esito.avvisi.push(`${artLabel(a.nome)} ${tg==='UNICA'?'':tg}: dallo scarico del foglio la giacenza è passata da ${prima} a ${ora}; la differenza contata (${n-prima>0?'+':''}${n-prima}) si applica a quella attuale`);
     if(n===prima){esito.uguali++;return}
     const mt=cM>=0?String(r[cM]??'').trim():'';const causa=causaDaTesto(mt,n-prima);
@@ -2146,7 +2174,7 @@ function vManuale(){
     <p><b>Magazzino</b> — tre schede. <i>Divise</i>: le maglie una per una, per lotto e taglia (verde in magazzino, gialla in uso, tratteggiata da cambiare, azzurra prenotata; bianca se da libero, nera se di un lotto riservato); <b>Aggiungi divisa</b> inserisce un capo nuovo, <b>Aggiungi lotto</b> e <b>Modifica lotto</b> gestiscono i lotti e le squadre che li usano. Il campo «n. maglia» cerca un numero; <b>Mostra anche le divise in uso</b> visualizza anche le maglie assegnate (in trasparenza). Un lotto senza maglie si può eliminare da <b>Modifica lotto</b>. In cima alla scheda sono segnalate le maglie che risultano due volte. Selezionando una maglia in magazzino, <b>Segna fuori uso</b> la lascia in magazzino (grigia e barrata) senza che venga mai assegnata, e <b>Rimetti in uso</b> la rende di nuovo assegnabile; <b>Dismetti</b> la toglie dal magazzino (si può annullare da Movimenti). <i>Materiale</i>: per ogni articolo e taglia sei valori: <i>totale</i> (in magazzino + consegnati), <i>consegnati</i>, <i>in magazzino</i>, <i>prenotati</i>, <i>ordinati</i> al fornitore e non ancora arrivati, <i>magazzino finale</i> (in magazzino − prenotati − da ordinare + ordinati). Selezionando una riga si apre la finestra dell'articolo: in cima si sceglie <b>Arrivo</b>, <b>Inventario</b>, <b>Dismessi</b> oppure <b>Ordine</b>, e sotto compaiono solo le caselle che servono, con un solo pulsante. <b>Aggiungi articolo</b>, in alto, crea un articolo; <b>Modifica articolo</b>, accanto al nome, ne cambia codice, famiglia, nome, stagione e taglie. Le taglie sono una riga ciascuna: cambiando il nome di una taglia la si rinomina dappertutto (pezzi in magazzino, richieste, movimenti e divise), dandole il nome di una taglia che esiste già le due si uniscono e le quantità si sommano; prima di scrivere viene salvata una copia e dall'esito la modifica si annulla. <b>Aggiungi taglia</b> ne crea una; con ✕ si toglie una taglia vuota (nessun pezzo, niente in arrivo, nessuna richiesta né divisa), i cui movimenti passati restano nel registro. Le taglie non più nell'elenco ma ancora usate compaiono tratteggiate, per poterle unire alla nuova. Le frecce ↑ ↓ cambiano l'ordine: l'ordine delle righe vale ovunque per quell'articolo (magazzino, richieste, fogli Excel); una taglia nuova si mette da sola al posto dell'ordine classico (XS, S, M, L…). Gli articoli di taglia unica mostrano i valori accanto al nome, senza tabella. In alto, <b>Riconto</b> scarica e ricarica il foglio per contare tutto il magazzino in una volta (vedi sotto). Eventuali incongruenze sono segnalate in cima alla scheda. <i>Storico e ordini</i>: i conti di ogni stagione e la proposta d'ordine per la successiva (vedi sotto).</p>
     <p><b>Movimenti</b> — il registro di consegne, rientri, arrivi e rettifiche, dal più recente; vengono mostrati gli ultimi 150, con il pulsante per visualizzarli tutti. La ricerca per atleta o articolo e il filtro per tipo restringono l'elenco; <b>Scarica il registro</b> salva tutti i movimenti in un foglio Excel. <b>Consegna a staff ed esterni</b> registra il materiale dato ad allenatori, dirigenti o esterni, o restituito da loro.</p>
     <p><b>Motivo delle differenze</b> — quando un inventario (nella finestra dell'articolo) o il riconto trova un numero diverso da quello registrato, si indica il motivo: per i pezzi mancanti <i>consegnati senza registrarli</i> (proposto), <i>persi o rovinati</i> o <i>errore di conteggio</i>; per quelli in più <i>arrivati senza registrarli</i>, <i>rientrati senza registrarli</i> o <i>errore di conteggio</i> (proposto). La giacenza diventa comunque il numero contato; in Storico e ordini ogni differenza va nella sua colonna (distribuite, arrivate, oppure inventari e dismessi), così i consumi e la proposta d'ordine sono giusti. Nel foglio del riconto il motivo sta nella colonna «Motivo», facoltativa.</p>
-    <p><b>Riconto del magazzino</b> — in Magazzino → Materiale, <b>Riconto → Scarica</b> salva un foglio con ogni articolo e taglia e i pezzi che risultano; si scrivono i pezzi contati (vuota = non contata, 0 = nessun pezzo) e con <b>Riconto → Carica</b> le differenze diventano rettifiche d'inventario, registrate insieme e annullabili dall'esito. La differenza si calcola sul numero del foglio, quindi le consegne fatte dopo lo scarico restano valide. Le divise da gara si controllano una per una in Divise.</p>
+    <p><b>Riconto del magazzino</b> — in Magazzino → Materiale, <b>Riconto → Scarica</b> salva un foglio con ogni articolo e taglia e i pezzi che risultano; si scrivono i pezzi contati (vuota = non contata, 0 = nessun pezzo) e con <b>Riconto → Carica</b> le differenze diventano rettifiche d'inventario, registrate insieme e annullabili dall'esito. La differenza si calcola sul numero del foglio, quindi le consegne fatte dopo lo scarico restano valide; lo stesso foglio caricato due volte non ripete le rettifiche. Se due articoli hanno lo stesso nome, il foglio li scrive con il nome completo. Le divise da gara si controllano una per una in Divise.</p>
     <p><b>Storico e ordini</b> — in Magazzino, la terza scheda: per ogni articolo e taglia del materiale, nella stagione scelta, rimaste dalla stagione prima, arrivate, a disposizione, distribuite e rimaste ora. Nella stagione in corso propone quanto ordinare per la successiva (distribuite + richieste aperte + margine di sicurezza − rimaste − già in arrivo); i numeri si correggono a mano, <b>Salva come ordine</b> li aggiunge agli ordinati al fornitore e <b>Scarica in Excel</b> salva la tabella. La percentuale del margine di sicurezza si imposta in Impostazioni (25% se non indicata). A fine stagione l'ordine si prepara <b>prima</b> di «Chiudi la stagione» in Impostazioni: la proposta si basa sulle consegne della stagione in corso, e con la stagione nuova i conti ripartono da zero (le rimaste diventano «rimaste dalla stagione prima»). Le stagioni passate restano consultabili dal menu in alto.</p>
     <p><b>Avviso di scorta bassa</b> — aggiungendo o modificando una richiesta, oppure consegnando un articolo senza richiesta (consegna diretta, a tutta la squadra o a staff ed esterni), il programma avvisa se in magazzino non ce n’è oppure se di quell’articolo, in quella taglia, ne restano da assegnare meno della soglia scelta in Impostazioni (5 se non indicata): l'avviso si intitola <b>Non disponibile</b> se l'articolo è finito o la richiesta risulta da ordinare, <b>Scorta bassa</b> se ne restano pochi, e resta aperto finché non si preme <b>Chiudi</b>. Il conto toglie quanto è già prenotato per altre richieste e quanto risulta già da ordinare.</p>
     <p><b>Esito delle richieste</b> — in Assegnazioni e nella scheda dell'atleta ogni richiesta ha un esito: <b>Pronta</b> (il capo c'è ed è prenotato per questa richiesta: si può consegnare), <b>Da ordinare</b> (in magazzino non basta: il capo va ordinato al fornitore), <b>Esclusa</b> (la squadra o l'articolo non sono in distribuzione, oppure l'atleta non è attivo o ha l'eliminazione in attesa di riconsegna), <b>Altra squadra</b> (atleta in due squadre: il materiale lo riceve una volta sola, con la scheda dell'altra squadra).</p>
@@ -2174,7 +2202,7 @@ function vManuale(){
 
   ${sezione('Annullare un movimento',`
     <p>In Movimenti, <b>Annulla movimento</b> rimette il magazzino nella situazione precedente. Una consegna con il ritiro della maglia vecchia si annulla per intero, e la richiesta consegnata torna aperta; l'annullamento di un arrivo rimette tra gli ordinati i pezzi che aveva scalato.</p>
-    <p>L'annullamento non è consentito se dopo quel movimento ne sono stati registrati altri sullo stesso capo o, per il materiale di un atleta, sullo stesso articolo; se la giacenza scenderebbe sotto zero; se la divisa tornerebbe a un atleta non più in archivio; se nel frattempo il numero della divisa è stato assegnato a un altro atleta della squadra. In questi casi occorre annullare prima i movimenti successivi o correggere la giacenza.</p>`)}
+    <p>L'annullamento non è consentito se dopo quel movimento ne sono stati registrati altri sullo stesso capo o, per il materiale di un atleta, sullo stesso articolo; se la giacenza scenderebbe sotto zero; se la divisa o il materiale tornerebbero a un atleta non più in archivio; se nel frattempo il numero della divisa è stato assegnato a un altro atleta della squadra. In questi casi occorre annullare prima i movimenti successivi o correggere la giacenza.</p>`)}
 
   ${sezione('Atleti in due squadre',`
     <p>Un atleta tesserato in due squadre ha una scheda per ciascuna squadra. Quando lo stesso nome compare in squadre diverse, in Squadre il programma chiede se si tratta della stessa persona; il collegamento si imposta o si toglie anche da <i>Modifica atleta</i>, alla voce «Gioca anche in un'altra squadra con la scheda di».</p>
@@ -2597,7 +2625,10 @@ const CAUSE_PIU=[['arrivati','Arrivati senza registrarli'],['rientrati','Rientra
 const causaBase=delta=>delta<0?'consegnati':'conto';
 const nomeCausa=c=>(CAUSE_MENO.concat(CAUSE_PIU).find(x=>x[0]===c)||[,''])[1];
 function causaDaTesto(t,delta){const k=KEY(t);if(!k)return causaBase(delta);
-  const l=delta<0?CAUSE_MENO:CAUSE_PIU;const x=l.find(([c,n])=>KEY(n)===k||KEY(c)===k||KEY(n).startsWith(k));return x?x[0]:null}
+  const l=delta<0?CAUSE_MENO:CAUSE_PIU;
+  // nome intero, o un inizio che indica un motivo solo (se ne indica due: nessuno)
+  const x=l.find(([c,n])=>KEY(n)===k||KEY(c)===k)||(()=>{const v=l.filter(([,n])=>KEY(n).startsWith(k));return v.length===1?v[0]:null})();
+  return x?x[0]:null}
 /* La proposta d'ordine, solo per la stagione in corso. La scorta e' una
    percentuale del distribuito (Andrea, 05/10/2026: "non vorrei che il
    magazzino andasse a zero"): con il 25% il magazzino regge una stagione fino
@@ -2788,7 +2819,11 @@ async function annullaMovimento(id){
     // Materiale di un atleta: prima i movimenti piu' recenti dello stesso
     // articolo per lo stesso atleta, se no la giacenza cresce di un pezzo che
     // non esiste.
-    if(x.atletaId&&dopo.some(y=>!y.divisaId&&y.atletaId===x.atletaId&&y.articolo===x.articolo&&y.taglia===x.taglia)){
+    if(x.atletaRimosso&&['CONSEGNA','RIENTRO','POSSESSO'].includes(x.tipo)){
+      toast(`${x.a} non è più in archivio: annullando, i pezzi non tornerebbero a nessuno. Annullamento non possibile.`);return}
+    // senza scheda (consegna fuori, o atleta eliminato) vale il nome scritto
+    const stessoChi=y=>x.atletaId?y.atletaId===x.atletaId:(!!x.a&&!y.atletaId&&y.a===x.a);
+    if((x.atletaId||x.a)&&dopo.some(y=>!y.divisaId&&stessoChi(y)&&y.articolo===x.articolo&&y.taglia===x.taglia)){
       toast('Annullare prima i movimenti più recenti di questo articolo per questo atleta.');return}
     // Un carico o una rettifica: non se la giacenza finirebbe sotto zero.
     const effetto=(x.tipo==='CARICO'||x.tipo==='RETTIFICA'||x.tipo==='RIENTRO'?1:-1)*(Number(x.qta)||0);
@@ -3225,7 +3260,7 @@ async function cancellaDavvero(id){
     for(const r of richieste)await S.db.doc('richieste/'+r).delete();
     // Il nome va scritto sul movimento prima di cancellare la scheda, se no il
     // registro resta con "Atleta rimosso" al posto di chi era.
-    for(const [mid] of movimenti)await S.db.doc('movimenti/'+mid).update({atletaId:null,a:nome});
+    for(const [mid] of movimenti)await S.db.doc('movimenti/'+mid).update({atletaId:null,a:nome,atletaRimosso:true});
     await S.db.doc('atlete/'+id).delete()});
   if(ok){toast('Atleta eliminato');location.hash='#atleti'}
   return ok;
@@ -3601,9 +3636,9 @@ document.addEventListener('click',async e=>{
       const articoli=(D.set.articoli||[]).map(a=>a.stagione&&a.stagione===vecchia?{...a,stagione:v}:a);
       // Anche i movimenti: lo storico li divide per nome della stagione, e con
       // il nome vecchio finivano in una stagione a parte (trovato in revisione).
-      const mvs=Object.entries(S.movimenti).filter(([,m])=>m.stagione===vecchia);
+      const mvs=Object.entries(S.movimenti).filter(([,m])=>m.stagione===vecchia||m.etichetta===vecchia);
       if(await w(async()=>{await S.db.doc('settings/main').update({stagione:v,articoli});
-        for(const [id] of mvs)await S.db.doc('movimenti/'+id).update({stagione:v})}))toast('Nome della stagione corretto');return}
+        for(const [id,m] of mvs)await S.db.doc('movimenti/'+id).update({...(m.stagione===vecchia?{stagione:v}:{}),...(m.etichetta===vecchia?{etichetta:v}:{})})}))toast('Nome della stagione corretto');return}
     case'chiudiStagione':return dlgChiudiStagione();
     case'includi':{const sq=D.set.squadre.map((s,i)=>i===Number(el.dataset.i)?{...s,includi:el.checked}:{...s});
       if(await w(()=>S.db.doc('settings/main').update({squadre:sq})))toast(el.checked?'Squadra inclusa':'Squadra esclusa');return}
@@ -3749,9 +3784,15 @@ function tagliaArticolo(a,t){
 }
 /* Da un nome scritto nel foglio all'articolo: vale il nome interno, il codice
    corto o il nome come si legge nel programma. */
+// Pezzi di un articolo/taglia in mano agli atleti: somma delle dotazioni, che
+// contano anche i «gia' in possesso» (consegne meno rientri sbagliava: un rientro
+// di un pezzo posseduto annullava la consegna a un altro atleta).
+function inMano(D,k){let n=0;for(const d of Object.values(D.dotazione||{}))n+=Math.max(0,d[k]||0);return n}
 function articoloDaNome(D,t){
   const k=KEY(t);if(!k)return null;
-  return (D.set.articoli||[]).find(a=>KEY(a.nome)===k||(a.codice&&KEY(a.codice)===k)||KEY(artLabel(a.nome))===k)||null;
+  const l=D.set.articoli||[];
+  const x=l.find(a=>KEY(a.nome)===k)||l.find(a=>a.codice&&KEY(a.codice)===k);if(x)return x;
+  const v=l.filter(a=>KEY(artLabel(a.nome))===k);return v.length===1?v[0]:null;
 }
 /* Dal nome (squadra, cognome, nome) all'atleta. Due atleti con lo stesso nome
    nella stessa squadra non si possono distinguere da un foglio: invece di
@@ -3884,7 +3925,7 @@ const MODELLI_EXCEL={
    for(const a of [...(D.set.articoli||[])].sort(perNome)){
     const tg=(a.taglie||[]).length?a.taglie:['UNICA'];
     for(const t of tg){const k=D.key(a.nome,t);const st=D.stock[k]||{ora:0,consegne:0,rientri:0,ordinati:0};
-     const fuori=Math.max(0,(st.consegne||0)-(st.rientri||0));const p=D.prenMat[k]||0;const ord=st.ordinati||0;
+     const fuori=inMano(D,k);const p=D.prenMat[k]||0;const ord=st.ordinati||0;
      out.push([a.nome,a.conNumero?'sì':'no',t,a.conNumero?'':String(st.ora||0),a.codice||'',a.stagione||'',
       artCodiceTaglia(a.nome,t),artLabel(a.nome),a.conNumero?'':String(fuori),a.conNumero?'':String(p),a.conNumero?'':String(ord),
       a.conNumero?'':String((st.ora||0)-p-(mancano[k]||0)+ord)])}}
