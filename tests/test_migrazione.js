@@ -121,8 +121,11 @@ const senzaCodice = (arts) => arts.map((a) => { const x = { ...a }; delete x.cod
     JSON.stringify(senzaCodice(arts)) === JSON.stringify(senzaCodice(prima.settings.main.articoli)),
     "per il resto gli articoli sono identici (nome, famiglia, taglie, stagione...)",
   );
-  const restoSettings = (m) => { const x = { ...m }; delete x.articoli; return JSON.stringify(x); };
+  // versioneVista: l'ultima versione del programma che ha aperto l'archivio
+  // (serve al messaggio della 1.0.0). E' l'unica cosa che si aggiunge.
+  const restoSettings = (m) => { const x = { ...m }; delete x.articoli; delete x.versioneVista; return JSON.stringify(x); };
   ok(restoSettings(dopo.settings.main) === restoSettings(prima.settings.main), "le altre impostazioni sono identiche");
+  ok(dopo.settings.main.versioneVista === w.__APP.versione(), "l'archivio ricorda quale versione del programma l'ha aperto");
   for (const col of ["atlete", "divise", "materiale", "richieste", "movimenti"])
     ok(JSON.stringify(dopo[col]) === JSON.stringify(prima[col]), `${col}: identici a prima`);
   const c1 = esiti(w);

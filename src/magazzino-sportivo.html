@@ -553,6 +553,21 @@ dialog::backdrop{background:rgba(20,26,33,.5)}
 dialog form{padding:18px 18px 16px;display:flex;flex-direction:column;overflow:auto;max-height:calc(100dvh - 40px)}
 dialog h2{margin:0 0 12px}
 dialog.conferma{width:min(460px,calc(100vw - 24px))}
+dialog.festa{width:min(480px,calc(100vw - 24px));text-align:center;overflow:hidden;position:relative}
+dialog.festa form{position:relative;z-index:1}
+dialog.festa h2{font-size:22px;margin:10px 0 8px}
+dialog.festa p{margin:0 0 10px;line-height:1.5}
+dialog.festa .festaAugurio{font-weight:600;color:var(--yellow-ink)}
+dialog.festa .dlg-actions{justify-content:center}
+.festaMaglia{width:84px;height:84px;margin:6px auto 0;border-radius:50%;background:var(--yellow);color:#1C2430;
+  display:flex;align-items:center;justify-content:center;font:700 28px/1 var(--f-cond,inherit);
+  box-shadow:0 0 0 6px var(--yellow-soft);animation:festaSalto .9s ease-out both}
+.coriandoli{position:absolute;inset:0;pointer-events:none;z-index:0}
+.coriandoli i{position:absolute;top:-14px;width:8px;height:12px;border-radius:2px;opacity:.9;
+  animation:festaCade linear forwards}
+@keyframes festaCade{to{transform:translateY(560px) rotate(540deg);opacity:0}}
+@keyframes festaSalto{0%{transform:scale(.3)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.coriandoli{display:none}.festaMaglia{animation:none}}
 #confTesto{margin:0 0 16px;white-space:pre-line;line-height:1.45}
 .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -586,6 +601,14 @@ dialog.conferma{width:min(460px,calc(100vw - 24px))}
 </nav>
 <main id="view"></main>
 <dialog id="dlg"><form id="dlgForm" method="dialog"></form></dialog>
+<dialog id="dlgFesta" class="festa" aria-labelledby="festaTitolo"><form method="dialog">
+  <div class="festaMaglia" aria-hidden="true">1.0</div>
+  <h2 id="festaTitolo">Il Magazzino diventa grande!</h2>
+  <p>Con questo aggiornamento il programma arriva alla <b>versione 1.0.0</b>: la prima versione completa e collaudata sul campo. Le maglie sono in fila, i numeri al loro posto e i borsoni hanno smesso di nascondersi.</p>
+  <p>Un grazie sentito per la pazienza, le prove e i suggerimenti che l'hanno resa possibile.</p>
+  <p class="festaAugurio">Buona stagione, e che ogni maglia trovi il suo numero!</p>
+  <div class="dlg-actions"><button class="btn primary" value="ok">Grazie, si parte!</button></div></form>
+  <div class="coriandoli" aria-hidden="true"></div></dialog>
 <dialog id="dlgConf" class="conferma"><form method="dialog"><p id="confTesto"></p>
   <div class="dlg-actions"><button class="btn" value="no">Annulla</button><button class="btn primary" value="si">Conferma</button></div></form></dialog>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -3799,6 +3822,40 @@ async function installaNuovaVersione(){
       clearInterval(battito);S.app.percento=100;render();
 }
 
+/* Versione 1.0.0 (Andrea: "dato che era contenta, solo per questo
+   aggiornamento, un messaggio simpatico"). settings.versioneVista e'
+   l'ultima versione del programma che ha aperto l'archivio: il messaggio
+   compare una volta sola, alla prima apertura con la 1.0.0, e solo su un
+   archivio gia' in uso (con atleti), non su un'installazione nuova e vuota.
+   Per le versioni dopo si aggiorna soltanto versioneVista. La versione vista
+   si ricorda anche sul computer (localStorage): riprendendo i dati da una
+   copia di prima dell'aggiornamento il messaggio non ricompare. */
+const VERSIONE_FESTA='1.0.0';
+let _festaGuardata=false;
+async function festaVersione(){
+  if(_festaGuardata||!window.__APP||!S.db)return;
+  // si aspetta che l'archivio sia caricato
+  if(S.loaded.size<COLS.length+1){setTimeout(festaVersione,500);return}
+  _festaGuardata=true;
+  const ora=window.__APP.versione();if(!ora)return;
+  const prima=(S.settings&&S.settings.versioneVista)||'';
+  let qui='';try{qui=localStorage.getItem('magazzino.versioneVista')||''}catch(e){}
+  const giaVista=prima===ora||qui===ora;
+  try{localStorage.setItem('magazzino.versioneVista',ora)}catch(e){}
+  if(prima!==ora&&!S.readonly){try{await S.db.doc('settings/main').update({versioneVista:ora})}catch(e){}}
+  if(!giaVista&&ora===VERSIONE_FESTA&&Object.keys(S.atlete).length)mostraFesta();
+}
+function mostraFesta(){
+  const d=$('#dlgFesta');if(!d||d.open)return;
+  const c=d.querySelector('.coriandoli');c.innerHTML='';
+  const colori=['#F2C230','#2F5DA8','#2E7D4F','#B4430C','#8DB0EB','#FFF4CC'];
+  for(let i=0;i<46;i++){const x=document.createElement('i');
+    x.style.left=(Math.random()*100)+'%';x.style.background=colori[i%colori.length];
+    x.style.animationDuration=(2.2+Math.random()*2.2)+'s';x.style.animationDelay=(Math.random()*1.2)+'s';
+    x.style.transform=`rotate(${Math.round(Math.random()*180)}deg)`;c.appendChild(x)}
+  d.showModal();
+}
+
 /* All'apertura: se c'e' una versione nuova lo si chiede subito con una
    finestra (Andrea: l'avviso in basso passava inosservato). "Piu' tardi"
    lascia il pulsante in Impostazioni e la domanda torna alla prossima
@@ -5374,7 +5431,7 @@ async function boot(){
   window.claude.use('downloads').then(d=>{S.dl=d}).catch(()=>{});
   // Poco dopo l'avvio: se c'è una versione nuova si propone di installarla,
   // se non c'è non succede niente.
-  if(window.__APP)setTimeout(offriAggiornamento,2500);
+  if(window.__APP){setTimeout(festaVersione,800);setTimeout(offriAggiornamento,2500)}
 }
 boot();
 </script>

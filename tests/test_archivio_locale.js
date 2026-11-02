@@ -331,6 +331,16 @@ const ok = (c, m) => {
   ok(fermato2 && !passi.includes("installa"), "se i dati non si salvano, l'aggiornamento non si installa");
 
   /* 9. all'apertura una finestra propone la versione nuova */
+  // con la 1.0.0 all'avvio si e' aperta la festa (passo 10): qui va chiusa,
+  // se no la domanda dell'aggiornamento giustamente non si apre sopra
+  // Nella copia di lavoro il programma nasce gia' pieno (archivio in uso): la
+  // festa si apre da sola. In quella generica nasce vuoto: non deve comparire.
+  if (w.__APP.versione() === "1.0.0")
+    ok(w.document.getElementById("dlgFesta").open === !!societaDiPartenza && w.localStorage.getItem("magazzino.versioneVista") === "1.0.0",
+      societaDiPartenza
+        ? "con la 1.0.0 la festa si è aperta da sola all'avvio, su un archivio già in uso"
+        : "con la 1.0.0, su un programma appena installato e vuoto, la festa non compare");
+  w.document.getElementById("dlgFesta").open = false;
   passi.length = 0;
   versioneNuova = "9.9.9";
   const domande = [];
@@ -360,6 +370,40 @@ const ok = (c, m) => {
   await w.offriAggiornamento();
   ok(domande.length === 0, "senza versione nuova non compare niente");
   w.__rispostaConferme = true;
+
+  /* 10. la festa della 1.0.0: una volta sola, dopo l'aggiornamento */
+  {
+    const festa = () => w.document.getElementById("dlgFesta");
+    const versioneVera = w.__APP.versione;
+    const prova = async (v, scorda = true) => {
+      festa().open = false;
+      if (scorda) w.localStorage.removeItem("magazzino.versioneVista");
+      w.__APP.versione = () => v;
+      w.eval("_festaGuardata=false");
+      await w.festaVersione();
+      await attendi(50);
+      return festa().open;
+    };
+    w.eval("S.db.doc('settings/main').update({versioneVista:'0.3.30'})");
+    await attendi(50);
+    ok(await prova("1.0.0") && w.eval("S.settings.versioneVista") === "1.0.0",
+      "aggiornando alla 1.0.0 compare il messaggio di festa, e la versione vista viene ricordata");
+    ok(festa().querySelectorAll(".coriandoli i").length > 20 && /1\.0\.0/.test(festa().textContent), "con i coriandoli e il numero di versione");
+    ok(!(await prova("1.0.0", false)), "riaprendo il programma il messaggio non ricompare");
+    // dati ripresi da una copia di prima dell'aggiornamento: l'archivio non sa
+    // piu' di averla vista, ma il computer si'
+    w.eval("S.db.doc('settings/main').update({versioneVista:'0.3.30'})");
+    await attendi(50);
+    ok(!(await prova("1.0.0", false)) && w.eval("S.settings.versioneVista") === "1.0.0",
+      "riprendendo i dati da una copia di prima dell'aggiornamento il messaggio non ricompare");
+    ok(!(await prova("1.0.1")) && w.eval("S.settings.versioneVista") === "1.0.1",
+      "le versioni dopo la 1.0.0 non lo mostrano: si ricordano e basta");
+    w.eval("S.db.doc('settings/main').update({versioneVista:'0.3.30'})");
+    await attendi(50);
+    ok(!(await prova("0.3.31")), "nemmeno le versioni prima della 1.0.0");
+    w.__APP.versione = versioneVera;
+    festa().open = false;
+  }
 
   ok(errs.length === 0, "nessun errore JavaScript " + errs.join("; "));
   process.exit(falliti ? 1 : 0);
