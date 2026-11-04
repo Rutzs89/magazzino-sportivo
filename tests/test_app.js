@@ -411,11 +411,26 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   store.divise.provaLG={taglia:tg,numero:77,modello:'LIBERO GIOVANILI',holder:null,daRestituire:false};notify();await wait(200);
   const pp=w.eval(`derive().prop[${JSON.stringify(ridL)}]`);
   ok(pp.divisaId==='provaLG',`con una maglia nel lotto giovanili la richiesta la riceve (${pp.esito} ${pp.divisaId||''})`);
-  // rinominare: maglie, squadre e tipi seguono il nome nuovo
+  // rinominare: maglie, squadre e tipi seguono il nome nuovo. Anche una
+  // maglia dismessa e la copia di una richiesta dentro un movimento: con la
+  // dismessa rimasta col nome vecchio, il lotto vecchio ricompariva vuoto.
+  store.divise.provaLGdis={taglia:tg,numero:78,modello:'LIBERO GIOVANILI',holder:null,daRestituire:false,dismessa:true};
+  store.movimenti=store.movimenti||{};
+  store.movimenti.provaMovLG={ts:1,data:'2026-11-04',tipo:'CONSEGNA',atletaId:rL.atletaId,articolo:rL.articolo,taglia:tg,qta:1,richiesta:{...rL,modello:'LIBERO GIOVANILI'},richieste:[{...rL,modello:'LIBERO GIOVANILI'}]};
+  notify();await wait(200);
   w.location.hash='#magazzino';w.eval('render()');await wait(200);
   w.document.querySelector('[data-act="modLotto"][data-v="LIBERO GIOVANILI"]').click();await wait(100);
   w.document.getElementById('ltNome').value='Liberi under';OK().click();await wait(700);
   ok(store.divise.provaLG.modello==='LIBERI UNDER'&&sq().find(x=>x.nome===T).modelloLibero==='LIBERI UNDER'&&set().tipiLotto['LIBERI UNDER']==='libero'&&!set().modelli.includes('LIBERO GIOVANILI'),'rinominando il lotto si aggiornano maglie, squadre e tipo');
+  ok(store.divise.provaLGdis.modello==='LIBERI UNDER','anche la maglia dismessa passa al nome nuovo');
+  ok(store.movimenti.provaMovLG.richiesta.modello==='LIBERI UNDER'&&store.movimenti.provaMovLG.richieste[0].modello==='LIBERI UNDER','e la copia della richiesta nei movimenti');
+  w.eval("S.ui.magTab='divise';render()");
+  ok(!w.document.querySelector('[data-act="modLotto"][data-v="LIBERO GIOVANILI"]'),'il lotto col nome vecchio non ricompare in Magazzino');
+  // archivi rinominati con la 1.0.0: dismesse rimaste col nome vecchio, il lotto non va mostrato
+  store.divise.provaLGdis={...store.divise.provaLGdis,modello:'NOME DI PRIMA'};notify();await wait(150);
+  w.eval("S.ui.magTab='divise';render()");
+  ok(!w.document.querySelector('[data-act="modLotto"][data-v="NOME DI PRIMA"]'),'un lotto con sole maglie dismesse non compare fra i lotti');
+  delete store.divise.provaLGdis;delete store.movimenti.provaMovLG;notify();await wait(150);
   // togliendo la squadra dal lotto torna al lotto LIBERO
   w.document.querySelector('[data-act="modLotto"][data-v="LIBERI UNDER"]').click();await wait(100);
   [...w.document.querySelectorAll('#dlgForm input[name="sq"]')].find(c=>c.value===T).checked=false;OK().click();await wait(700);
@@ -432,5 +447,12 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   if(ridL==='provaLibero'){delete store.richieste.provaLibero;notify();await wait(200)}
   w.__rispostaConferme=undefined;}
 
+ // Ogni versione pubblicata ha il suo messaggio simpatico (Andrea, 04/11/2026):
+ // la prova si ferma se la versione in tauri.conf.json non ce l'ha.
+ {const versione=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')).version;
+  const nov=w.eval('NOVITA');
+  ok(!!nov[versione],`la versione ${versione} ha il suo messaggio dopo l'aggiornamento (NOVITA)`);
+  const storti=Object.entries(nov).filter(([v,n])=>!/^\d+\.\d+\.\d+$/.test(v)||!n.titolo||!Array.isArray(n.testo)||!n.testo.length||/\$\{/.test(JSON.stringify(n)));
+  ok(storti.length===0,'ogni messaggio ha versione, titolo e testo'+(storti.length?': '+storti.map(x=>x[0]).join(', '):''));}
  ok(errs.length===0,'nessun errore JavaScript '+(errs.join('; ')));
  process.exit(fail?1:0)})();

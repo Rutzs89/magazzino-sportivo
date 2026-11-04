@@ -335,11 +335,11 @@ const ok = (c, m) => {
   // se no la domanda dell'aggiornamento giustamente non si apre sopra
   // Nella copia di lavoro il programma nasce gia' pieno (archivio in uso): la
   // festa si apre da sola. In quella generica nasce vuoto: non deve comparire.
-  if (w.__APP.versione() === "1.0.0")
-    ok(w.document.getElementById("dlgFesta").open === !!societaDiPartenza && w.localStorage.getItem("magazzino.versioneVista") === "1.0.0",
+  if (w.eval("!!NOVITA[window.__APP.versione()]"))
+    ok(w.document.getElementById("dlgFesta").open === !!societaDiPartenza && w.localStorage.getItem("magazzino.versioneVista") === w.__APP.versione(),
       societaDiPartenza
-        ? "con la 1.0.0 la festa si è aperta da sola all'avvio, su un archivio già in uso"
-        : "con la 1.0.0, su un programma appena installato e vuoto, la festa non compare");
+        ? "dopo l'aggiornamento il messaggio della versione si è aperto da solo, su un archivio già in uso"
+        : "su un programma appena installato e vuoto il messaggio della versione non compare");
   w.document.getElementById("dlgFesta").open = false;
   passi.length = 0;
   versioneNuova = "9.9.9";
@@ -371,7 +371,7 @@ const ok = (c, m) => {
   ok(domande.length === 0, "senza versione nuova non compare niente");
   w.__rispostaConferme = true;
 
-  /* 10. la festa della 1.0.0: una volta sola, dopo l'aggiornamento */
+  /* 10. il messaggio di ogni versione: una volta sola, dopo l'aggiornamento */
   {
     const festa = () => w.document.getElementById("dlgFesta");
     const versioneVera = w.__APP.versione;
@@ -396,8 +396,11 @@ const ok = (c, m) => {
     await attendi(50);
     ok(!(await prova("1.0.0", false)) && w.eval("S.settings.versioneVista") === "1.0.0",
       "riprendendo i dati da una copia di prima dell'aggiornamento il messaggio non ricompare");
-    ok(!(await prova("1.0.1")) && w.eval("S.settings.versioneVista") === "1.0.1",
-      "le versioni dopo la 1.0.0 non lo mostrano: si ricordano e basta");
+    ok(await prova("1.0.1") && /fantasmi/.test(festa().textContent) && !/diventa grande/.test(festa().textContent),
+      "la 1.0.1 mostra il suo messaggio, non quello della 1.0.0");
+    ok(!(await prova("1.0.1", false)), "e anche quello una volta sola");
+    ok(!(await prova("1.0.99")) && w.eval("S.settings.versioneVista") === "1.0.99",
+      "una versione senza messaggio non mostra niente: si ricorda e basta");
     w.eval("S.db.doc('settings/main').update({versioneVista:'0.3.30'})");
     await attendi(50);
     ok(!(await prova("0.3.31")), "nemmeno le versioni prima della 1.0.0");

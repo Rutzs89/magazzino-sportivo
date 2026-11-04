@@ -559,6 +559,7 @@ dialog.festa h2{font-size:22px;margin:10px 0 8px}
 dialog.festa p{margin:0 0 10px;line-height:1.5}
 dialog.festa .festaAugurio{font-weight:600;color:var(--yellow-ink)}
 dialog.festa .dlg-actions{justify-content:center}
+.festaMaglia.lunga{font-size:20px}
 .festaMaglia{width:84px;height:84px;margin:6px auto 0;border-radius:50%;background:var(--yellow);color:#1C2430;
   display:flex;align-items:center;justify-content:center;font:700 28px/1 var(--f-cond,inherit);
   box-shadow:0 0 0 6px var(--yellow-soft);animation:festaSalto .9s ease-out both}
@@ -602,12 +603,11 @@ dialog.festa .dlg-actions{justify-content:center}
 <main id="view"></main>
 <dialog id="dlg"><form id="dlgForm" method="dialog"></form></dialog>
 <dialog id="dlgFesta" class="festa" aria-labelledby="festaTitolo"><form method="dialog">
-  <div class="festaMaglia" aria-hidden="true">1.0</div>
-  <h2 id="festaTitolo">Il Magazzino diventa grande!</h2>
-  <p>Con questo aggiornamento il programma arriva alla <b>versione 1.0.0</b>: la prima versione completa e collaudata sul campo. Le maglie sono in fila, i numeri al loro posto e i borsoni hanno smesso di nascondersi.</p>
-  <p>Un grazie sentito per la pazienza, le prove e i suggerimenti che l'hanno resa possibile.</p>
-  <p class="festaAugurio">Buona stagione, e che ogni maglia trovi il suo numero!</p>
-  <div class="dlg-actions"><button class="btn primary" value="ok">Grazie, si parte!</button></div></form>
+  <div class="festaMaglia" aria-hidden="true"></div>
+  <h2 id="festaTitolo"></h2>
+  <div class="festaTesto"></div>
+  <p class="festaAugurio"></p>
+  <div class="dlg-actions"><button class="btn primary" value="ok"></button></div></form>
   <div class="coriandoli" aria-hidden="true"></div></dialog>
 <dialog id="dlgConf" class="conferma"><form method="dialog"><p id="confTesto"></p>
   <div class="dlg-actions"><button class="btn" value="no">Annulla</button><button class="btn primary" value="si">Conferma</button></div></form></dialog>
@@ -1434,7 +1434,11 @@ function vMagazzino(){
     if(probl.length)h+=`<div class="notice bad">${probl.join('<br>')}</div>`;
 
     // Tutti i lotti, anche quelli ancora vuoti: prima quelli da gara, poi i liberi.
-    const mods=[...new Set([...(D.set.modelli||[]),...Object.values(S.divise).map(d=>d.modello||'STANDARD')])]
+    // I lotti delle impostazioni, piu' quelli che hanno ancora maglie in
+    // circolazione. Le dismesse non contano: un lotto rinominato con le
+    // versioni fino alla 1.0.0 lasciava le dismesse col nome vecchio, e il
+    // lotto vecchio ricompariva vuoto accanto a quello nuovo.
+    const mods=[...new Set([...(D.set.modelli||[]),...Object.values(S.divise).filter(d=>!d.dismessa).map(d=>d.modello||'STANDARD')])]
       .sort((a,b)=>(tipoLotto(a)===tipoLotto(b)?0:tipoLotto(a)==='gara'?-1:1)||(a==='STANDARD'?-1:b==='STANDARD'?1:a.localeCompare(b)));
     let trovate=0;
     for(const m of mods){
@@ -2406,6 +2410,8 @@ function dlgLotto(nome){
   const D=derive();const nuovo=!nome;
   const tipo=nuovo?'gara':tipoLotto(nome);
   const maglie=nuovo?[]:Object.entries(S.divise).filter(([,d])=>!d.dismessa&&(d.modello||'STANDARD')===nome);
+  // per rinominare servono tutte, anche le dismesse
+  const tutteLeMaglie=nuovo?[]:Object.entries(S.divise).filter(([,d])=>(d.modello||'STANDARD')===nome);
   const usa=x=>!nuovo&&(tipo==='libero'?D.liberoDi[x.nome]===nome:D.lotto[x.nome]===nome);
   openDlg(`<h2>${nuovo?'Nuovo lotto':esc(nomeLotto(nome,true))}</h2>
   <p class="sub">Un lotto è un insieme di maglie dello stesso tipo: le divise da gara di una squadra o di più squadre, oppure le maglie da libero. Ogni squadra usa un lotto per le divise da gara e uno per le maglie da libero.</p>
@@ -2452,8 +2458,16 @@ function dlgLotto(nome){
     tipi[nuovoNome]=nuovoTipo;
     const ok=await w(async()=>{
       if(!nuovo&&nuovoNome!==nome){
-        for(const [id] of maglie)await S.db.doc('divise/'+id).update({modello:nuovoNome});
-        for(const [rid,r] of Object.entries(S.richieste))if(r.modello===nome)await S.db.doc('richieste/'+rid).update({modello:nuovoNome})}
+        for(const [id] of tutteLeMaglie)await S.db.doc('divise/'+id).update({modello:nuovoNome});
+        for(const [rid,r] of Object.entries(S.richieste))if(r.modello===nome)await S.db.doc('richieste/'+rid).update({modello:nuovoNome});
+        // la copia della richiesta nei movimenti, che annullando una consegna
+        // la ricrea: se no tornerebbe col nome vecchio
+        const conNome=r=>r&&r.modello===nome?{...r,modello:nuovoNome}:r;
+        for(const [mid,m] of Object.entries(S.movimenti)){
+          const cambi={};
+          if(m.richiesta&&m.richiesta.modello===nome)cambi.richiesta=conNome(m.richiesta);
+          if(Array.isArray(m.richieste)&&m.richieste.some(r=>r&&r.modello===nome))cambi.richieste=m.richieste.map(conNome);
+          if(Object.keys(cambi).length)await S.db.doc('movimenti/'+mid).update(cambi)}}
       await S.db.doc('settings/main').update({modelli:listaNuova,tipiLotto:tipi,squadre})});
     if(ok)toast(nuovo?`Lotto ${cap(nuovoNome)} aggiunto`:'Lotto salvato');
     return ok});
@@ -3822,15 +3836,28 @@ async function installaNuovaVersione(){
       clearInterval(battito);S.app.percento=100;render();
 }
 
-/* Versione 1.0.0 (Andrea: "dato che era contenta, solo per questo
-   aggiornamento, un messaggio simpatico"). settings.versioneVista e'
-   l'ultima versione del programma che ha aperto l'archivio: il messaggio
-   compare una volta sola, alla prima apertura con la 1.0.0, e solo su un
-   archivio gia' in uso (con atleti), non su un'installazione nuova e vuota.
-   Per le versioni dopo si aggiorna soltanto versioneVista. La versione vista
-   si ricorda anche sul computer (localStorage): riprendendo i dati da una
-   copia di prima dell'aggiornamento il messaggio non ricompare. */
-const VERSIONE_FESTA='1.0.0';
+/* Le novita' di ogni versione (Andrea, 04/11/2026: "quando pubblichiamo
+   mettiamo sempre un messaggio divertente"). Ogni versione pubblicata ha qui
+   il suo messaggio: compare una volta sola, alla prima apertura dopo
+   l'aggiornamento, e solo su un archivio gia' in uso (con atleti), non su
+   un'installazione nuova e vuota. Racconta con leggerezza cosa e' cambiato.
+   Una prova controlla che la versione in tauri.conf.json abbia il suo.
+   settings.versioneVista e' l'ultima versione che ha aperto l'archivio; la si
+   ricorda anche sul computer (localStorage), cosi' riprendendo i dati da una
+   copia di prima dell'aggiornamento il messaggio non ricompare. Chi salta una
+   versione vede solo il messaggio di quella che installa.
+   Campi: titolo, testo (paragrafi, HTML scritto qui), augurio, pulsante,
+   tondo (facoltativo: di norma il numero di versione). */
+const NOVITA={
+  '1.0.0':{tondo:'1.0',titolo:'Il Magazzino diventa grande!',
+    testo:['Con questo aggiornamento il programma arriva alla <b>versione 1.0.0</b>: la prima versione completa e collaudata sul campo. Le maglie sono in fila, i numeri al loro posto e i borsoni hanno smesso di nascondersi.',
+      'Un grazie sentito per la pazienza, le prove e i suggerimenti che l\'hanno resa possibile.'],
+    augurio:'Buona stagione, e che ogni maglia trovi il suo numero!',pulsante:'Grazie, si parte!'},
+  '1.0.1':{titolo:'Caccia ai fantasmi completata!',
+    testo:['Capitava che, rinominando un lotto, il nome vecchio restasse in giro come un fantasma: un lotto vuoto accanto a quello nuovo, che non voleva saperne di andarsene.',
+      'Con la <b>versione 1.0.1</b> il nome nuovo vale per tutte le maglie del lotto, anche per quelle dismesse, e i lotti fantasma già comparsi spariscono da soli. I dati non vengono modificati.'],
+    augurio:'Nessun fantasma è stato maltrattato durante la correzione.',pulsante:'Ottimo, grazie!'},
+};
 let _festaGuardata=false;
 async function festaVersione(){
   if(_festaGuardata||!window.__APP||!S.db)return;
@@ -3843,10 +3870,16 @@ async function festaVersione(){
   const giaVista=prima===ora||qui===ora;
   try{localStorage.setItem('magazzino.versioneVista',ora)}catch(e){}
   if(prima!==ora&&!S.readonly){try{await S.db.doc('settings/main').update({versioneVista:ora})}catch(e){}}
-  if(!giaVista&&ora===VERSIONE_FESTA&&Object.keys(S.atlete).length)mostraFesta();
+  if(!giaVista&&NOVITA[ora]&&Object.keys(S.atlete).length)mostraFesta(ora);
 }
-function mostraFesta(){
-  const d=$('#dlgFesta');if(!d||d.open)return;
+function mostraFesta(v){
+  const d=$('#dlgFesta');const n=NOVITA[v];if(!d||d.open||!n)return;
+  const tondo=n.tondo||v;
+  const t=d.querySelector('.festaMaglia');t.textContent=tondo;t.classList.toggle('lunga',tondo.length>3);
+  $('#festaTitolo').textContent=n.titolo;
+  d.querySelector('.festaTesto').innerHTML=n.testo.map(x=>`<p>${x}</p>`).join('');
+  const a=d.querySelector('.festaAugurio');a.textContent=n.augurio||'';a.hidden=!n.augurio;
+  d.querySelector('button[value="ok"]').textContent=n.pulsante||'Chiudi';
   const c=d.querySelector('.coriandoli');c.innerHTML='';
   const colori=['#F2C230','#2F5DA8','#2E7D4F','#B4430C','#8DB0EB','#FFF4CC'];
   for(let i=0;i<46;i++){const x=document.createElement('i');
