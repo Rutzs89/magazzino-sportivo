@@ -447,6 +447,25 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   if(ridL==='provaLibero'){delete store.richieste.provaLibero;notify();await wait(200)}
   w.__rispostaConferme=undefined;}
 
+ // Le taglie delle divise si raggiungono da Magazzino -> Divise (Andrea,
+ // 06/11/2026: «le divise non sono in materiale ma in divise nel magazzino»).
+ {w.location.hash='#magazzino';w.eval("S.ui.magTab='divise';render()");await wait(100);
+  const b=w.document.querySelector('.barraMag [data-act="taglieDivise"]');
+  ok(!!b,'in Magazzino -> Divise c\'è il pulsante «Taglie»');
+  b.click();await wait(150);
+  const art=w.eval('artDivisa()');const dlg=w.document.getElementById('dlg');
+  const righe=w.document.querySelectorAll('#dlgForm [data-orig]').length;
+  // anche le taglie fuori elenco ma ancora usate (tratteggiate, da unire)
+  ok(dlg.open&&righe>=w.eval('(S.settings.articoli.find(a=>a.conNumero).taglie||[]).filter(Boolean).length')&&(new RegExp(art,'i').test(w.document.getElementById('dlgForm').textContent)||[...w.document.querySelectorAll('#dlgForm input')].some(x=>x.value===art)),
+    `«Taglie» apre le taglie dell'articolo della divisa (${righe} taglie)`);
+  w.document.querySelector('#dlgForm button[value="cancel"]').click();await wait(100);
+  // in Materiale l'articolo della divisa non c'e' piu' (ne' la sua famiglia, se vuota)
+  w.eval("S.ui.magTab='materiale';render()");await wait(100);
+  const iDiv=w.eval('(S.settings.articoli||[]).findIndex(a=>a.conNumero)');
+  ok(!w.document.querySelector(`[data-act="modArticolo"][data-i="${iDiv}"]`)&&!/si contano uno per uno/.test(w.document.getElementById('view').textContent),
+    'in Materiale l\'articolo della divisa non compare più');
+  ok(w.document.querySelectorAll('[data-act="modArticolo"]').length===w.eval('(S.settings.articoli||[]).filter(a=>!a.conNumero&&!(a.base&&a.base!==a.nome)).length'),
+    'e tutti gli altri articoli ci sono ancora');}
  // Ogni versione pubblicata ha il suo messaggio simpatico (Andrea, 04/11/2026):
  // la prova si ferma se la versione in tauri.conf.json non ce l'ha.
  {const versione=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')).version;
