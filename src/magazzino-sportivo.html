@@ -1690,16 +1690,20 @@ function testaSquadre(){
    adesso, non quello che era stato previsto. */
 /* I numeri che una squadra porta davvero, con chi li porta. Le divise segnate
    da cambiare non contano: quelle stanno tornando indietro e il loro numero e'
-   gia' libero per un'altra. */
+   gia' libero per un'altra. Ogni atleta conta una volta per numero: chi ha la
+   divisa e la maglia da libero con lo stesso numero non e' un doppione
+   (falso allarme visto il 17/11/2026 su un'atleta U15). */
 function numeriDiSquadra(D,squadra){
   // Tutta la serie: con un gruppo di squadre, i numeri di tutte.
   const piu=squadreDellaSerie(D,squadra).length>1;
   const per={};
   for(const [id,a] of Object.entries(S.atlete)){
     if(!stessaSerie(D,a.squadra,squadra))continue;
+    const visti=new Set();
     for(const did of (D.perAtleta[id]||[])){
       const d=S.divise[did];if(!d||d.dismessa||d.daRestituire)continue;
-      (per[Number(d.numero)]=per[Number(d.numero)]||[]).push(fullName(a)+(piu?` (${teamLabel(a.squadra)})`:''))}}
+      const n=Number(d.numero);if(visti.has(n))continue;visti.add(n);
+      (per[n]=per[n]||[]).push(fullName(a)+(piu?` (${teamLabel(a.squadra)})`:''))}}
   return per;
 }
 
@@ -3875,6 +3879,10 @@ const NOVITA={
       'Ora le divise stanno tutte in Divise, taglie comprese, e Materiale resta solo per il materiale.',
       'Con la <b>versione 1.0.2</b> c\'è il pulsante <b>Taglie</b> in Magazzino → Divise, proprio accanto alle maglie che misura: si aggiungono, si rinominano e si riordinano da lì.'],
     augurio:'Ogni maglia al suo numero, ogni taglia al suo posto.',pulsante:'Lo provo subito!'},
+  '1.0.3':{titolo:'Nessun sosia in squadra!',
+    testo:['Chi ha la divisa da gara e la maglia da libero con lo stesso numero veniva scambiata per due persone diverse, e il programma segnalava un «numero ripetuto» che non c\'era.',
+      'Con la <b>versione 1.0.3</b> un numero è ripetuto solo se lo portano due persone diverse. Le segnalazioni vere restano tutte.'],
+    augurio:'Una persona, un numero, due maglie: tutto in regola.',pulsante:'Perfetto!'},
 };
 let _festaGuardata=false;
 async function festaVersione(){

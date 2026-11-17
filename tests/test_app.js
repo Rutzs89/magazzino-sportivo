@@ -447,6 +447,22 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
   if(ridL==='provaLibero'){delete store.richieste.provaLibero;notify();await wait(200)}
   w.__rispostaConferme=undefined;}
 
+ // Divisa da gara e maglia da libero con lo stesso numero alla stessa atleta:
+ // non e' un numero ripetuto (falso allarme visto sull'archivio vero).
+ {const [aid,a]=Object.entries(store.atlete).find(([id,x])=>x.attiva!==false&&!Object.values(store.divise).some(d=>d.holder===id));
+  const T=a.squadra;
+  const libero=w.eval('derive().lottiLibero[0]');const gara=w.eval(`derive().lotto[${JSON.stringify(T)}]||'STANDARD'`);
+  const usati=new Set(Object.values(store.divise).filter(d=>d.holder&&store.atlete[d.holder]&&w.eval(`stessaSerie(derive(),${JSON.stringify(store.atlete[d.holder].squadra)},${JSON.stringify(T)})`)).map(d=>Number(d.numero)));
+  let n=1;while(usati.has(n))n++;
+  const prima=w.eval('doppioniPerSerie(derive()).length');
+  store.divise.provaGaraN={taglia:'M',numero:n,modello:gara,holder:aid,daRestituire:false};
+  store.divise.provaLibN={taglia:'M',numero:n,modello:libero,holder:aid,daRestituire:false};notify();await wait(150);
+  ok(w.eval('doppioniPerSerie(derive()).length')===prima&&!(w.eval('conNumeroDoppio(derive())')[aid]||[]).includes(n),
+    'divisa e maglia da libero con lo stesso numero alla stessa atleta: nessun numero ripetuto');
+  const [aid2]=Object.entries(store.atlete).find(([id,x])=>id!==aid&&x.squadra===T);
+  store.divise.provaAltraN={taglia:'L',numero:n,modello:gara,holder:aid2,daRestituire:false};notify();await wait(150);
+  ok(w.eval('doppioniPerSerie(derive()).length')===prima+1,'lo stesso numero a una compagna di squadra resta segnalato');
+  delete store.divise.provaGaraN;delete store.divise.provaLibN;delete store.divise.provaAltraN;notify();await wait(150);}
  // Le taglie delle divise si raggiungono da Magazzino -> Divise (Andrea,
  // 06/11/2026: «le divise non sono in materiale ma in divise nel magazzino»).
  {w.location.hash='#magazzino';w.eval("S.ui.magTab='divise';render()");await wait(100);
