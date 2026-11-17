@@ -1284,6 +1284,59 @@ const carica = async (tipo, righe) => {
     fogli.every((f, k) => f.intestazioni.length === w.eval(`MODELLI_EXCEL.${TIPI[k]}.colonne.length+(MODELLI_EXCEL.${TIPI[k]}.info||[]).length`)),
     "ogni foglio esce con le colonne da caricare e quelle solo informative",
   );
+  /* 12a. il listino: si scarica e si ricarica come gli altri fogli */
+  {
+    await w.eval("scaricaModello('listino')");
+    await attendi(100);
+    const L = fogliScritti["Listino"];
+    ok(L && L.intestazioni.slice(0, 3).join("|") === "Articolo|Prezzo di vendita|Costo d'acquisto" &&
+       L.menu.every((m) => m && m.aiuto) && L.menu.slice(3).every((m) => m.informativa),
+      "il listino si scarica con le sue colonne, ognuna con l'aiuto; quelle informative in grigio");
+    const sopra = L.gruppi.map((g, k) => (k > 0 && L.gruppi[k - 1] === g ? "" : g));
+    const righe = L.righe.map((r) => [...r]);
+    const iArt = righe.findIndex((r) => !w.eval(`derive().conNumero(${JSON.stringify(r[0])})`));
+    righe[iArt][1] = "19,90"; righe[iArt][2] = "11";
+    daLeggere = [sopra, L.intestazioni, ...righe];
+    await w.eval("caricaModello('listino')");
+    await attendi(600);
+    const a = w.eval("S.settings.articoli").find((x) => x.nome === righe[iArt][0]);
+    ok(a.prezzo === 19.9 && a.costo === 11, "caricando il listino compilato il prezzo cambia");
+    // gli altri fogli non lo scambiano per il loro
+    daLeggere = [sopra, L.intestazioni, ...righe];
+    const primaArt = JSON.stringify(w.eval("S.settings.articoli"));
+    await w.eval("caricaModello('articoli')");
+    await attendi(300);
+    ok(JSON.stringify(w.eval("S.settings.articoli")) === primaArt, "il listino caricato come foglio Articoli viene rifiutato");
+    ok(!w.eval("sezioneExcel()").includes('data-v="listino"'), "la prima configurazione resta di quattro fogli");
+  }
+
+  /* 12c. il foglio della cassa */
+  {
+    const D = w.eval("derive()");
+    const [k] = Object.entries(D.stock).find(([kk, q]) => q.ora > 2 && !D.conNumero(kk.split("|")[0]));
+    const [art, tg] = k.split("|");
+    const aid = Object.keys(w.eval("S.atlete"))[0];
+    await w.eval(`insieme(async()=>{await mov({tipo:'VENDITA',atletaId:${JSON.stringify(aid)},articolo:${JSON.stringify(art)},taglia:${JSON.stringify(tg)},qta:2,prezzo:9.5,importo:19,pagamento:{stato:'daIncassare'}})})`);
+    await attendi(300);
+    await w.eval("scaricaCassa()");
+    await attendi(100);
+    const C = fogliScritti["Cassa"];
+    ok(C && C.intestazioni[7] === "Importo" && C.righe.length >= 1 && C.righe.some((r) => r[7] === "19,00" && r[8] === "da incassare"),
+      "il foglio della cassa elenca le vendite con importo e pagamento");
+    ok(C.istruzioni.some((r) => /Da incassare/.test(r) && /non emette documenti fiscali|19,00/.test(r + C.istruzioni.join(" "))), "con i totali nelle istruzioni");
+    await w.eval("scaricaMovimenti()");
+    await attendi(100);
+    const M = fogliScritti["Movimenti"];
+    const iImp = M.intestazioni.indexOf("Importo");
+    ok(iImp > 0 && M.righe.some((r) => r[1] === "Vendita" && r[iImp] === "19,00" && r[iImp + 1] === "da incassare") &&
+       M.righe.every((r) => r.length === M.intestazioni.length),
+      "nel registro dei movimenti in Excel le vendite hanno importo e pagamento");
+    const id = Object.entries(w.eval("S.movimenti")).find(([, m]) => m.tipo === "VENDITA")[0];
+    w.__rispostaConferme = true;
+    await w.eval(`annullaMovimento(${JSON.stringify(id)})`);
+    await attendi(300);
+  }
+
   /* 12b. menu a tendina e istruzioni impaginate */
   // Per guardare i file veri: SALVA_FOGLI=<cartella> scrive qui quello che
   // arriverebbe alla parte Rust (lo usa la prova `scrive_i_fogli_salvati`).

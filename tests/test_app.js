@@ -482,6 +482,144 @@ const ASCOLTATI_A_PARTE=['legenda','modCampo','modSquadra'];
     'in Materiale l\'articolo della divisa non compare più');
   ok(w.document.querySelectorAll('[data-act="modArticolo"]').length===w.eval('(S.settings.articoli||[]).filter(a=>!a.conNumero&&!(a.base&&a.base!==a.nome)).length'),
     'e tutti gli altri articoli ci sono ancora');}
+ // Listino e valore del magazzino (Andrea, 17/11/2026)
+ {const set=()=>w.eval('S.settings');
+  const arts=set().articoli;const iM=arts.findIndex(a=>!a.conNumero&&!(a.base&&a.base!==a.nome));const am=arts[iM];
+  const iD=arts.findIndex(a=>a.conNumero);
+  ok(w.eval('[leggiEuro("12,50"),leggiEuro("€ 1.234,5"),leggiEuro("8.9"),leggiEuro(""),Number.isNaN(leggiEuro("dodici"))].join("|")')==='12.5|1234.5|8.9||true',
+    'i prezzi si leggono in euro: 12,50 · € 1.234,5 · 8.9; vuoto = non indicato; un testo è un errore');
+  // dalla finestra dell'articolo
+  w.location.hash='#magazzino';w.eval("S.ui.magTab='materiale';render()");await wait(100);
+  w.document.querySelector(`[data-act="modArticolo"][data-i="${iM}"]`).click();await wait(100);
+  w.document.getElementById('acPrezzo').value='15,00';w.document.getElementById('acCosto').value='9,5';
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(400);
+  ok(set().articoli[iM].prezzo===15&&set().articoli[iM].costo===9.5,'dalla finestra dell\'articolo si salvano prezzo di vendita e costo d\'acquisto');
+  w.document.querySelector(`[data-act="modArticolo"][data-i="${iM}"]`).click();await wait(100);
+  ok(w.document.getElementById('acPrezzo').value==='15,00'&&w.document.getElementById('acCosto').value==='9,50','riaprendo la finestra i prezzi sono scritti in euro');
+  w.document.getElementById('acPrezzo').value='quindici';w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(200);
+  ok(w.document.getElementById('dlg').open&&set().articoli[iM].prezzo===15,'un prezzo scritto male non si salva e la finestra resta aperta');
+  w.document.querySelector('#dlgForm button[value="cancel"]').click();await wait(100);
+  w.document.querySelector(`[data-act="modArticolo"][data-i="${iD}"]`)||w.eval(`dlgArticolo(${iD})`);await wait(100);
+  ok(!w.document.getElementById('acPrezzo')&&!!w.document.getElementById('acCosto'),'la divisa da gara ha solo il costo d\'acquisto: non si vende');
+  w.document.querySelector('#dlgForm button[value="cancel"]').click();await wait(100);
+  // valore in magazzino
+  const D=w.eval('derive()');
+  const pezzi=Object.entries(D.stock).filter(([k])=>k.split('|')[0]===am.nome).reduce((z,[,q])=>z+Math.max(0,q.ora),0);
+  const val=w.eval('valoreMagazzino(derive())');
+  ok(Math.abs(val.perArt[am.nome]-pezzi*9.5)<0.001,`valore in magazzino = pezzi × costo (${pezzi} × 9,50)`);
+  w.eval("S.ui.magTab='materiale';render()");await wait(100);
+  ok(w.document.getElementById('view').textContent.includes(w.eval(`euro(${pezzi*9.5})`)),'il valore compare in Materiale');
+  w.location.hash='';w.eval('render()');await wait(100);
+  ok(/valore/.test(w.document.getElementById('view').textContent),'e nella pagina iniziale');
+  // il foglio del listino: andata e ritorno senza cambiare niente
+  const righe=w.eval('MODELLI_EXCEL.listino.righe()');
+  ok(righe.length===arts.length&&righe.every(r=>r.length===8),'il listino ha una riga per articolo, con le colonne informative');
+  const giro=await w.eval(`MODELLI_EXCEL.listino.applica(${JSON.stringify(righe.map(r=>r.slice(0,3)))},true)`);
+  ok(giro.aggiornati===0&&!giro.problemi.length,'ricaricando il listino così com\'è non cambia niente');
+  const am2=arts.find((a,k)=>k!==iM&&!a.conNumero&&!(a.base&&a.base!==a.nome));
+  const es=await w.eval(`MODELLI_EXCEL.listino.applica(${JSON.stringify([
+    [am2.nome,'7,90','4,20'],[am.nome,'',''],['ARTICOLO CHE NON ESISTE','1',''],[am2.nome,'8',''],
+    [arts[iD].nome,'30','12'],['','abc','']])},false)`);
+  await wait(200);
+  const a2=set().articoli.find(a=>a.nome===am2.nome);
+  ok(a2.prezzo===7.9&&a2.costo===4.2,'il listino aggiorna prezzo e costo');
+  ok(set().articoli[iM].prezzo===15&&set().articoli[iM].costo===9.5,'una casella vuota lascia il prezzo com\'è');
+  ok(es.problemi.some(x=>/non esiste/.test(x))&&es.problemi.some(x=>/manca l'articolo/.test(x)),'un articolo sconosciuto e una riga senza articolo sono segnalati');
+  ok(es.avvisi.some(x=>/più volte/.test(x))&&es.avvisi.some(x=>/non si vende/.test(x))&&set().articoli[iD].prezzo==null&&set().articoli[iD].costo===12,
+    'riga ripetuta ignorata; la divisa prende il costo ma non il prezzo di vendita');
+  ok(w.eval('valoreMagazzino(derive()).divise')===12*w.eval('Object.values(S.divise).filter(d=>!d.dismessa&&!d.holder).length'),'il valore delle divise conta le maglie in magazzino');
+  // Storico e ordini: gli importi accanto all'articolo
+  w.location.hash='#magazzino';w.eval("S.ui.magTab='storico';render()");await wait(150);
+  ok(/arrivati|consegnati/.test([...w.document.querySelectorAll('#view .group-head span')].map(x=>x.textContent).join(' ')),'in Storico e ordini compaiono gli importi');
+  // via i prezzi di prova
+  store.settings.main={...store.settings.main,articoli:store.settings.main.articoli.map(a=>{const x={...a};delete x.prezzo;delete x.costo;return x})};notify();await wait(150);}
+ // Vendite e cassa (Andrea, 17/11/2026)
+ {w.__rispostaConferme=true;
+  const D0=w.eval('derive()');
+  // due articoli di materiale con pezzi in magazzino, uno con il prezzo di listino
+  const conPezzi=Object.entries(D0.stock).filter(([k,q])=>q.ora>=3&&!D0.conNumero(k.split('|')[0])).map(([k])=>k.split('|'));
+  const [art1,tg1]=conPezzi[0];const [art2,tg2]=conPezzi.find(([a])=>a!==art1);
+  const arts=store.settings.main.articoli.map(x=>x.nome===art1?{...x,prezzo:12.5,costo:7}:x);
+  store.settings.main={...store.settings.main,articoli:arts};notify();await wait(150);
+  const [aid]=Object.entries(store.atlete).find(([,x])=>x.attiva!==false);
+  const st=(a,t)=>w.eval(`(derive().stock[${JSON.stringify(a+'|'+t)}]||{ora:0}).ora`);
+  const st1=st(art1,tg1),st2=st(art2,tg2);
+  const dot0=JSON.stringify(w.eval(`derive().dotazione[${JSON.stringify(aid)}]||{}`));
+  w.location.hash='#atleta/'+aid;w.eval('render()');await wait(100);
+  w.document.querySelector(`[data-act="vendi"][data-id="${aid}"]`).click();await wait(120);
+  const riga=n=>w.document.querySelectorAll('#vRighe .vRiga')[n];
+  const scegli=(r,art,tg)=>{const sa=r.querySelector('.vArt');sa.value=art;sa.dispatchEvent(new w.Event('change',{bubbles:true}));r.querySelector('.vTg').value=tg};
+  scegli(riga(0),art1,tg1);
+  ok(riga(0).querySelector('.vPrz').value==='12,50','il prezzo proposto è quello del listino');
+  {const r0=riga(0);const sa=r0.querySelector('.vArt');sa.value=art1;sa.dispatchEvent(new w.Event('change',{bubbles:true}));
+   const tgProp=r0.querySelector('.vTg').value;
+   ok(st(art1,tgProp)>0,`la taglia proposta ha pezzi in magazzino (${tgProp})`);
+   r0.querySelector('.vTg').value=tg1;}
+  ok(w.document.getElementById('dlg').classList.contains('largo'),'la finestra della vendita è più larga, per leggere il nome dell\'articolo');
+  riga(0).querySelector('.vQta').value='2';
+  w.document.getElementById('vAgg').click();await wait(50);
+  scegli(riga(1),art2,tg2);
+  ok(riga(1).querySelector('.vPrz').value==='','senza prezzo di listino la casella resta da riempire');
+  // senza prezzo non si registra
+  w.document.getElementById('vStato').value='daIncassare';w.document.getElementById('vStato').dispatchEvent(new w.Event('change',{bubbles:true}));
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(200);
+  ok(w.document.getElementById('dlg').open&&!Object.values(store.movimenti).some(m=>m.tipo==='VENDITA'),'una riga senza prezzo non fa registrare la vendita');
+  riga(1).querySelector('.vPrz').value='8';riga(1).querySelector('.vPrz').dispatchEvent(new w.Event('input',{bubbles:true}));
+  ok(w.document.getElementById('vTot').textContent.replace(/\s/g,'')===w.eval('euro(33)').replace(/\s/g,''),'il totale si aggiorna mentre si scrive (2 × 12,50 + 8)');
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(500);
+  const vend=Object.entries(store.movimenti).filter(([,m])=>m.tipo==='VENDITA');
+  ok(vend.length===2&&vend[0][1].gruppo&&vend[0][1].gruppo===vend[1][1].gruppo,'una vendita di due articoli: due movimenti della stessa operazione');
+  ok(vend.some(([,m])=>m.articolo===art1&&m.qta===2&&m.prezzo===12.5&&m.importo===25)&&vend.every(([,m])=>m.pagamento.stato==='daIncassare'),'con prezzo, importo e pagamento da incassare');
+  ok(st(art1,tg1)===st1-2&&st(art2,tg2)===st2-1,'i pezzi venduti escono dal magazzino');
+  ok(JSON.stringify(w.eval(`derive().dotazione[${JSON.stringify(aid)}]||{}`))===dot0,'e non entrano nella dotazione dell\'atleta');
+  w.eval('render()');await wait(100);
+  ok(/Acquisti/.test(w.document.getElementById('view').textContent)&&/da incassare/.test(w.document.getElementById('view').textContent),'sulla scheda compaiono gli acquisti, da incassare');
+  // cassa
+  const gid=vend[0][1].gruppo;
+  let c=w.eval(`riepilogoCassa(S.settings.stagione)`);
+  ok(c.daIncassare===33&&c.incassato===0&&c.aperte.length===1,'in Cassa la vendita è da incassare (33 €)');
+  w.location.hash='';w.eval('render()');await wait(80);
+  ok(/da incassare/.test(w.document.getElementById('view').textContent),'la pagina iniziale ricorda quanto c\'è da incassare');
+  w.location.hash='#movimenti';w.eval("S.ui.mvTab='cassa';render()");await wait(100);
+  ok(!!w.document.querySelector('.cassaTot')&&!!w.document.querySelector(`[data-act="incassa"][data-id="${gid}"]`),'la scheda Cassa mostra i totali e la vendita da incassare');
+  w.document.querySelector(`[data-act="incassa"][data-id="${gid}"]`).click();await wait(100);
+  w.document.getElementById('iMetodo').value='POS';
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(400);
+  c=w.eval(`riepilogoCassa(S.settings.stagione)`);
+  ok(c.incassato===33&&c.daIncassare===0&&c.perMetodo.POS===33&&Object.values(store.movimenti).filter(m=>m.tipo==='VENDITA').every(m=>m.pagamento.stato==='incassato'),
+    'segnata incassata con il POS: tutte le righe della vendita cambiano insieme');
+  // l'acquisto: un arrivo con il costo
+  const arrivo=Object.keys(store.movimenti).length;
+  store.movimenti.provaArrivoCassa={ts:Date.now(),data:'2026-11-17',tipo:'CARICO',articolo:art1,taglia:tg1,qta:4,stagione:store.settings.main.stagione,costoUnit:7};notify();await wait(150);
+  c=w.eval(`riepilogoCassa(S.settings.stagione)`);
+  ok(c.acquisti>=28&&c.saldo===Math.round((c.incassato-c.acquisti)*100)/100,'gli acquisti contano gli arrivi per il costo, e il saldo è incassato − acquisti');
+  delete store.movimenti.provaArrivoCassa;notify();await wait(150);
+  // storico: i venduti contano fra i consegnati
+  const sto=w.eval(`storicoStagione(derive(),S.settings.stagione)[${JSON.stringify(art1+'|'+tg1)}]`);
+  ok(sto&&sto.distr>=2,'in Storico e ordini i pezzi venduti contano fra i consegnati');
+  // movimenti: filtro e annullamento della vendita intera
+  w.eval("S.ui.mvTab='registro';S.ui.mvTipo='VENDITA';render()");await wait(100);
+  ok(w.document.querySelectorAll('#view .list .item').length===2,'nel registro il filtro «Vendita» mostra le due righe');
+  w.eval("S.ui.mvTipo='';render()");
+  await w.eval(`annullaMovimento(${JSON.stringify(vend[0][0])})`);await wait(400);
+  ok(!Object.values(store.movimenti).some(m=>m.tipo==='VENDITA')&&st(art1,tg1)===st1&&st(art2,tg2)===st2,'annullando la vendita spariscono tutte le righe e i pezzi tornano in magazzino');
+  ok(!w.document.getElementById('dlg').classList.contains('largo'),'chiusa la vendita, le altre finestre tornano della misura solita');
+  // eliminando chi ha ancora da pagare, il programma lo ricorda
+  {store.movimenti.provaVendDaInc={ts:Date.now(),data:'2026-11-17',tipo:'VENDITA',atletaId:aid,articolo:art1,taglia:tg1,qta:1,prezzo:5,importo:5,pagamento:{stato:'daIncassare'},stagione:store.settings.main.stagione,gruppo:'gProvaDaInc'};
+   notify();await wait(150);
+   let dom='';w.__rispostaConferme=t=>{dom=t;return false};
+   await w.eval(`cancellaDavvero(${JSON.stringify(aid)})`);await wait(100);
+   ok(/da incassare/.test(dom)&&/Cassa/.test(dom)&&!!store.atlete[aid],'eliminando un atleta con vendite da incassare il programma lo ricorda (e con «no» non elimina)');
+   w.__rispostaConferme=true;delete store.movimenti.provaVendDaInc;notify();await wait(150);}
+  // venduti oltre la giacenza: si chiede conferma
+  let domanda='';w.__rispostaConferme=t=>{domanda=t;return false};
+  w.eval(`dlgVendita(${JSON.stringify(aid)})`);await wait(100);
+  scegli(riga(0),art1,tg1);riga(0).querySelector('.vQta').value=String(st1+5);
+  w.document.querySelector('#dlgForm button[value="ok"]').click();await wait(300);
+  ok(/non ne risultano abbastanza/.test(domanda)&&!Object.values(store.movimenti).some(m=>m.tipo==='VENDITA'),'vendendo più pezzi di quelli in magazzino il programma chiede, e con «no» non registra');
+  w.document.querySelector('#dlgForm button[value="cancel"]').click();await wait(100);
+  w.__rispostaConferme=true;w.eval("S.ui.mvTab='registro'");
+  store.settings.main={...store.settings.main,articoli:store.settings.main.articoli.map(x=>{const y={...x};delete y.prezzo;delete y.costo;return y})};notify();await wait(150);}
  // Ogni versione pubblicata ha il suo messaggio simpatico (Andrea, 04/11/2026):
  // la prova si ferma se la versione in tauri.conf.json non ce l'ha.
  {const versione=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')).version;
